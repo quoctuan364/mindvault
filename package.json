@@ -1,0 +1,26 @@
+{
+  "name": "mindvault",
+  "version": "1.0.0",
+  "description": "MindVault — Full-Stack Second Brain & Knowledge Graph Management System (Node.js + SQLite + Interactive Force Graph)",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "seed": "node server/seed.js"
+  },
+  "keywords": [
+    "second-brain",
+    "knowledge-graph",
+    "markdown",
+    "zettelkasten",
+    "note-taking",
+    "pomodoro",
+    "sqlite",
+    "nodejs"
+  ],
+  "author": "Quoc Tuan (quoctuan364)",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.5.0"
+  }
+}
