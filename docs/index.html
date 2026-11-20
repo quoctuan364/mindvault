@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="vi" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MindVault v2.0 — Second Brain &amp; Knowledge Graph</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div id="mobileBackdrop" class="mobile-backdrop hidden"></div>
+
+  <div class="app-shell">
+    <!-- Left Navigation Sidebar -->
+    <aside class="sidebar" id="sidebarPanel">
+      <div class="brand-header">
+        <div class="brand-logo">
+          <span class="brand-orb">MV</span>
+          <div>
+            <h1>MindVault</h1>
+            <span class="brand-subtitle" id="brandModeSubtitle">Second Brain OS · v2.0</span>
+          </div>
+        </div>
+        <button id="btnNewNote" class="btn-primary btn-new-note" type="button" title="Tạo ghi chú mới">
+          <span>+</span> Mới
+        </button>
+      </div>
+
+      <!-- Quick Command Search Trigger -->
+      <div class="sidebar-search">
+        <div class="search-input-wrap">
+          <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+          <input type="text" id="sidebarSearchInput" placeholder="Tìm kiếm hoặc nhấn Ctrl+K..." autocomplete="off" />
+          <kbd class="kbd-hint">Ctrl+K</kbd>
+        </div>
+      </div>
+
+      <!-- Workspace Mode Switcher -->
+      <nav class="mode-nav" aria-label="Chế độ làm việc">
+        <button class="mode-btn active" data-view="editor" type="button">
+          <svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+            <polyline points="14 2 14 8 20 8"></polyline>
+            <line x1="16" y1="13" x2="8" y2="13"></line>
+            <line x1="16" y1="17" x2="8" y2="17"></line>
+          </svg>
+          <span>Workspace &amp; Notes</span>
+          <span class="badge" id="navNoteCount">0</span>
+        </button>
+        <button class="mode-btn" data-view="graph" type="button">
+          <svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <circle cx="6" cy="6" r="3"></circle>
+            <circle cx="18" cy="6" r="3"></circle>
+            <circle cx="12" cy="18" r="3"></circle>
+            <line x1="8.5" y1="7.5" x2="15.5" y2="7.5"></line>
+            <line x1="7.5" y1="8.5" x2="10.5" y2="15.5"></line>
+            <line x1="16.5" y1="8.5" x2="13.5" y2="15.5"></line>
+          </svg>
+          <span>Knowledge Graph</span>
+          <span class="badge badge-emerald" id="navLinkCount">0</span>
+        </button>
+        <button class="mode-btn" data-view="tasks" type="button">
+          <svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <polyline points="9 11 12 14 22 4"></polyline>
+            <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+          </svg>
+          <span>Action Tasks Hub</span>
+          <span class="badge badge-amber" id="navTaskCount">0/0</span>
+        </button>
+        <button class="mode-btn" data-view="insights" type="button">
+          <svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <line x1="18" y1="20" x2="18" y2="10"></line>
+            <line x1="12" y1="20" x2="12" y2="4"></line>
+            <line x1="6" y1="20" x2="6" y2="14"></line>
+          </svg>
+          <span>System Metrics</span>
+        </button>
+      </nav>
+
+      <!-- Filters: Folders & Tags -->
+      <div class="sidebar-section">
+        <div class="section-header">
+          <span>THƯ MỤC (DIRECTORIES)</span>
+          <button id="btnClearFilter" class="btn-link" type="button" title="Xóa bộ lọc">Tất cả</button>
+        </div>
+        <div id="folderList" class="chip-list folder-list"></div>
+      </div>
+
+      <div class="sidebar-section">
+        <div class="section-header">
+          <span>THẺ PHÂN LOẠI (#TAGS)</span>
+        </div>
+        <div id="tagList" class="chip-list tag-cloud"></div>
+      </div>
+
+      <!-- Notes List in Sidebar -->
+      <div class="sidebar-section notes-list-section">
+        <div class="section-header">
+          <span id="notesListHeading">DANH SÁCH TÀI LIỆU</span>
+          <label class="fav-toggle" title="Chỉ hiện tài liệu đánh dấu sao">
+            <input type="checkbox" id="chkFavoriteOnly" />
+            <span>Đã đánh dấu</span>
+          </label>
+        </div>
+        <div id="notesListContainer" class="notes-list"></div>
+      </div>
+
+      <!-- Sidebar Footer -->
+      <div class="sidebar-footer">
+        <button id="btnTemplates" class="footer-action-btn" type="button" title="Kho mẫu tài liệu kỹ thuật">Mẫu</button>
+        <input type="file" id="fileImportVault" accept=".json,application/json" hidden />
+        <button id="btnImportVault" class="footer-action-btn" type="button" title="Nhập dữ liệu JSON đã sao lưu">Import JSON</button>
+        <button id="btnExportVault" class="footer-action-btn" type="button" title="Xuất toàn bộ dữ liệu JSON">Backup JSON</button>
+      </div>
+    </aside>
+
+    <!-- Main Workspace Area -->
+    <main class="main-workspace">
+      <!-- Top Header Bar -->
+      <header class="topbar">
+        <div class="topbar-left">
+          <button id="btnMobileMenu" class="mobile-menu-btn" type="button" aria-label="Mở menu danh sách">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <line x1="3" y1="6" x2="21" y2="6"></line>
+              <line x1="3" y1="12" x2="21" y2="12"></line>
+              <line x1="3" y1="18" x2="21" y2="18"></line>
+            </svg>
+          </button>
+
+          <div class="breadcrumbs" id="topbarBreadcrumbs">
+            <span class="crumb-folder" id="crumbFolder">Second Brain</span>
+            <span class="crumb-sep">/</span>
+            <span class="crumb-title" id="crumbTitle">MindVault Architecture Hub</span>
+            <span class="save-indicator" id="saveStatus">● Đang kết nối...</span>
+          </div>
+        </div>
+
+        <div class="topbar-right">
+          <button id="btnResetDemo" class="btn-secondary btn-compact hidden" type="button" title="Khôi phục dữ liệu mẫu mặc định">Reset Demo</button>
+          <button id="btnToggleTheme" class="btn-secondary btn-compact" type="button" title="Chuyển đổi giao diện Sáng / Tối">Giao diện Sáng</button>
+
+          <!-- Built-in Pomodoro Focus Timer -->
+          <div class="pomodoro-widget" id="pomodoroWidget">
+            <span class="pomo-label">Focus</span>
+            <span class="pomo-timer" id="pomoTimeDisplay">25:00</span>
+            <button id="btnPomoToggle" class="pomo-btn" type="button" title="Bắt đầu / Tạm dừng 25 phút">▶</button>
+            <button id="btnPomoReset" class="pomo-btn" type="button" title="Đặt lại">↺</button>
+          </div>
+
+          <!-- Editor Layout Switcher -->
+          <div class="layout-switcher" id="editorLayoutGroup">
+            <button class="layout-btn" data-layout="edit" type="button" title="Chỉ soạn thảo">Editor</button>
+            <button class="layout-btn active" data-layout="split" type="button" title="Chia đôi Live Preview">Split</button>
+            <button class="layout-btn" data-layout="preview" type="button" title="Chế độ đọc bài">Reader</button>
+          </div>
+        </div>
+      </header>
+
+      <!-- VIEW 1: SPLIT-PANE MARKDOWN EDITOR & LIVE PREVIEW -->
+      <section id="viewEditor" class="workspace-view active">
+        <div class="note-meta-bar">
+          <div class="meta-left">
+            <button id="btnPickIcon" class="icon-picker-btn" type="button" title="Đổi nhãn tài liệu">CORE</button>
+            <input type="text" id="noteTitleInput" class="note-title-input" placeholder="Tiêu đề tài liệu..." />
+          </div>
+          <div class="meta-right">
+            <div class="meta-field">
+              <span class="meta-label">DIR:</span>
+              <input type="text" id="noteFolderInput" class="meta-input folder-input" placeholder="Thư mục..." list="folderSuggestions" />
+              <datalist id="folderSuggestions">
+                <option value="Second Brain"></option>
+                <option value="AI &amp; Security"></option>
+                <option value="Engineering"></option>
+                <option value="Productivity"></option>
+                <option value="Projects"></option>
+                <option value="Inbox"></option>
+              </datalist>
+            </div>
+
+            <div class="meta-field">
+              <span class="meta-label">NODE:</span>
+              <input type="color" id="noteColorInput" class="color-picker-input" value="#10b981" title="Màu nút trên Đồ thị Tri thức" />
+            </div>
+
+            <button id="btnTogglePin" class="icon-action-btn" type="button" title="Ghim lên đầu danh sách">PIN</button>
+            <button id="btnToggleFav" class="icon-action-btn" type="button" title="Đánh dấu quan trọng">STAR</button>
+            <button id="btnExportMd" class="icon-action-btn" type="button" title="Tải xuống file .md">.MD</button>
+            <button id="btnDeleteNote" class="icon-action-btn danger" type="button" title="Xóa tài liệu này">DEL</button>
+          </div>
+        </div>
+
+        <!-- Tag bar & Quick formatting toolbar -->
+        <div class="editor-subbar">
+          <div class="tags-editor-wrap">
+            <span class="tag-prefix">TAGS:</span>
+            <div id="activeNoteTags" class="active-note-tags"></div>
+            <input type="text" id="tagAddInput" class="tag-add-input" placeholder="+ thêm tag rồi nhấn Enter..." />
+          </div>
+
+          <div class="md-toolbar">
+            <button class="md-tool-btn" data-insert="**Chữ đậm**" type="button" title="In đậm"><b>B</b></button>
+            <button class="md-tool-btn" data-insert="*Chữ nghiêng*" type="button" title="In nghiêng"><i>I</i></button>
+            <button class="md-tool-btn" data-insert="## Tiêu đề mục" type="button" title="Tiêu đề H2">H2</button>
+            <button class="md-tool-btn" data-insert="- [ ] Nhiệm vụ mới" type="button" title="Thêm Checkbox">[ ] Task</button>
+            <button class="md-tool-btn" data-insert="[[MindVault Architecture Hub]]" type="button" title="Chèn Wiki-Link">[[Wiki-Link]]</button>
+            <button class="md-tool-btn" data-insert="```python\n# Code here\n```" type="button" title="Chèn Code">&lt;/&gt; Code</button>
+            <button class="md-tool-btn" data-insert="> **Ghi chú:** " type="button" title="Chèn trích dẫn">Quote</button>
+          </div>
+        </div>
+
+        <!-- Split Pane Container -->
+        <div id="editorSplitContainer" class="editor-split-container layout-split">
+          <div class="editor-pane">
+            <textarea id="noteContentInput" class="markdown-textarea" placeholder="Viết bằng Markdown... Dùng [[Tên Tài Liệu]] để tạo liên kết hai chiều trên Đồ thị Tri thức."></textarea>
+          </div>
+
+          <div class="preview-pane">
+            <div id="markdownPreview" class="markdown-body"></div>
+
+            <!-- Bi-directional Backlinks & Outgoing Links Panel -->
+            <div class="connections-panel">
+              <div class="conn-column">
+                <h4>LIÊN KẾT ĐI (OUTGOING WIKI-LINKS)</h4>
+                <div id="outgoingLinksList" class="conn-chips"></div>
+              </div>
+              <div class="conn-column">
+                <h4>LIÊN KẾT ĐẾN (BACKLINKS)</h4>
+                <div id="backlinksList" class="conn-chips"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Status Bar -->
+        <footer class="editor-statusbar">
+          <div class="status-left">
+            <span id="statWords">0 từ</span>
+            <span>·</span>
+            <span id="statReadTime">1 phút đọc</span>
+            <span>·</span>
+            <span id="statTasksInNote">0/0 nhiệm vụ</span>
+          </div>
+          <div class="status-right">
+            <span>Cú pháp: <code>[[Tên bài]]</code> để nối mạng tri thức</span>
+            <span>·</span>
+            <span id="statUpdatedAt">Vừa xong</span>
+          </div>
+        </footer>
+      </section>
+
+      <!-- VIEW 2: INTERACTIVE 2D FORCE-DIRECTED KNOWLEDGE GRAPH -->
+      <section id="viewGraph" class="workspace-view">
+        <div class="graph-header-overlay">
+          <div>
+            <h2>Đồ thị Tri thức Tương tác (Interactive Knowledge Graph)</h2>
+            <p>Kéo thả nút vật lý, cuộn chuột để thu phóng, lọc theo tên/tag hoặc nhấp để mở tài liệu.</p>
+          </div>
+          <div class="graph-controls">
+            <input type="text" id="graphSearchInput" class="graph-search-input" placeholder="Lọc nút đồ thị (VD: RAG, Security)..." autocomplete="off" />
+            <button id="btnGraphResetZoom" class="btn-secondary" type="button">Căn giữa</button>
+            <button id="btnGraphRepulse" class="btn-secondary" type="button">Giãn nút</button>
+          </div>
+        </div>
+        <div class="canvas-wrapper">
+          <canvas id="knowledgeGraphCanvas"></canvas>
+          <div id="graphNodeTooltip" class="graph-tooltip hidden"></div>
+        </div>
+      </section>
+
+      <!-- VIEW 3: ACTION TASKS HUB -->
+      <section id="viewTasks" class="workspace-view">
+        <div class="hub-container">
+          <div class="hub-header">
+            <div>
+              <h2>Trung tâm Quản lý Nhiệm vụ (Action Tasks Hub)</h2>
+              <p>Tự động trích xuất toàn bộ checkbox <code>- [ ]</code> và <code>- [x]</code> từ mọi tài liệu trong kho tri thức.</p>
+            </div>
+            <div class="task-filter-tabs">
+              <button class="task-tab active" data-tfilter="all" type="button">Tất cả</button>
+              <button class="task-tab" data-tfilter="pending" type="button">Đang chờ</button>
+              <button class="task-tab" data-tfilter="done" type="button">Hoàn thành</button>
+            </div>
+          </div>
+          <div id="tasksHubList" class="tasks-hub-grid"></div>
+        </div>
+      </section>
+
+      <!-- VIEW 4: BRAIN ANALYTICS & INSIGHTS -->
+      <section id="viewInsights" class="workspace-view">
+        <div class="hub-container">
+          <div class="hub-header">
+            <div>
+              <h2>Thống kê Kho Tri thức &amp; Hiệu suất Tập trung</h2>
+              <p>Tổng quan về mật độ liên kết Zettelkasten, phân bổ chủ đề và lịch sử phiên Pomodoro.</p>
+            </div>
+          </div>
+
+          <div class="kpi-grid" id="insightsKpiGrid"></div>
+
+          <div class="insights-two-col">
+            <div class="insight-card">
+              <h3>Phân bổ Tài liệu theo Thư mục</h3>
+              <div id="folderDistChart" class="bar-chart-list"></div>
+            </div>
+            <div class="insight-card">
+              <h3>Top Thẻ Tri thức (#Tags)</h3>
+              <div id="tagDistChart" class="bar-chart-list"></div>
+            </div>
+          </div>
+
+          <div class="insight-card" style="margin-top: 20px;">
+            <h3>Lịch sử Phiên Tập trung (Focus Sessions)</h3>
+            <div id="focusHistoryList" class="focus-history-list"></div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Command Palette Modal (Ctrl+K) -->
+  <div id="cmdPaletteModal" class="modal-backdrop hidden">
+    <div class="cmd-palette">
+      <div class="cmd-input-header">
+        <span style="font-family:var(--font-mono); color:var(--accent-primary); font-weight:700;">&gt;_</span>
+        <input type="text" id="cmdSearchInput" placeholder="Nhập tên tài liệu hoặc thư mục..." autocomplete="off" />
+        <kbd>ESC</kbd>
+      </div>
+      <div id="cmdResultsList" class="cmd-results"></div>
+    </div>
+  </div>
+
+  <!-- Templates Modal -->
+  <div id="templatesModal" class="modal-backdrop hidden">
+    <div class="cmd-palette">
+      <div class="cmd-input-header">
+        <h3 style="margin:0; font-size: 1rem;">Chọn Mẫu Tài Liệu Kỹ Thuật (Templates)</h3>
+        <button id="btnCloseTemplates" class="btn-link" type="button">Đóng [ESC]</button>
+      </div>
+      <div class="templates-grid" id="templatesList"></div>
+    </div>
+  </div>
+
+  <!-- Badge Label Picker Popover -->
+  <div id="emojiPopover" class="emoji-popover hidden"></div>
+
+  <!-- Toast Container -->
+  <div id="toastRoot" class="toast-root" aria-live="polite"></div>
+
+  <script src="./local-engine.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>
