@@ -363,6 +363,62 @@ const server = http.createServer(async (req, res) => {
       });
     }
 
+    // API: Import notes from exported JSON backup
+    if (pathname === '/api/import' && req.method === 'POST') {
+      const body = await parseBody(req);
+      if (!body || !Array.isArray(body.notes)) {
+        return sendJson(res, 400, { error: 'Invalid import payload: expected { notes: [...] }' });
+      }
+      const now = new Date().toISOString();
+      const upsert = db.prepare(`
+        INSERT INTO notes (id, title, icon, folder, content, tags, pinned, favorite, archived, color, word_count, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          title = excluded.title,
+          icon = excluded.icon,
+          folder = excluded.folder,
+          content = excluded.content,
+          tags = excluded.tags,
+          pinned = excluded.pinned,
+          favorite = excluded.favorite,
+          archived = excluded.archived,
+          color = excluded.color,
+          word_count = excluded.word_count,
+          updated_at = excluded.updated_at
+      `);
+      let importedCount = 0;
+      db.exec('BEGIN');
+      try {
+        for (const item of body.notes) {
+          if (!item || typeof item.title !== 'string') continue;
+          const id = (item.id && String(item.id).trim()) || `note-${crypto.randomUUID().slice(0, 8)}`;
+          const content = String(item.content || '');
+          const tags = Array.isArray(item.tags) ? JSON.stringify(item.tags) : '[]';
+          upsert.run(
+            id,
+            item.title.trim() || 'Untitled Note',
+            item.icon || 'DOC',
+            (item.folder || 'Inbox').trim(),
+            content,
+            tags,
+            item.pinned ? 1 : 0,
+            item.favorite ? 1 : 0,
+            item.archived ? 1 : 0,
+            item.color || '#10b981',
+            countWords(content),
+            item.createdAt || now,
+            item.updatedAt || now
+          );
+          importedCount++;
+        }
+        db.exec('COMMIT');
+      } catch (txErr) {
+        db.exec('ROLLBACK');
+        throw txErr;
+      }
+      return sendJson(res, 200, { imported: importedCount });
+    }
+
     // Static files serving
     let filePath = pathname === '/' ? path.join(PUBLIC_DIR, 'index.html') : path.join(PUBLIC_DIR, pathname);
     if (!filePath.startsWith(PUBLIC_DIR)) {
