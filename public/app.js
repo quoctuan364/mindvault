@@ -1,1500 +1,2007 @@
 /* ============================================================================
- * MindVault — Frontend Application & 2D Physics Knowledge Graph Engine
+ * MindVault v2.0 — Hybrid Second Brain & Knowledge Graph Workspace
+ * Runs seamlessly on Node.js SQLite WAL API OR standalone browser localStorage
+ * via ./local-engine.js (GitHub Pages Live Demo compatible).
  * ============================================================================ */
 
-const state = {
-  notes: [],
-  activeNoteId: null,
-  activeView: 'editor', // 'editor' | 'graph' | 'tasks' | 'insights'
-  filterFolder: 'ALL',
-  filterTag: '',
-  filterFavorite: false,
-  searchQuery: '',
-  taskFilter: 'all', // 'all' | 'pending' | 'done'
-  graphData: { nodes: [], edges: [] },
-  stats: null,
-  saveTimer: null,
-  pomo: {
-    secondsLeft: 25 * 60,
-    running: false,
-    interval: null
-  }
-};
+(() => {
+  'use strict';
 
-const EMOJI_LIST = [
-  'CORE', 'DOC', 'SEC', 'RAG', 'SYS', 'PLAN', 'FLOW', 'ADR',
-  'API', 'DB', 'LLM', 'ML', 'DEV', 'BUG', 'SPEC', 'NOTE'
-];
+  const ICON_BADGES = [
+    'CORE', 'SEC', 'RAG', 'ARCH',
+    'CODE', 'DATA', 'TASK', 'DOC',
+    'IDEA', 'LOG', 'TEST', 'OPS'
+  ];
 
-const SMART_TEMPLATES = [
-  {
-    title: 'Zettelkasten Permanent Note',
-    icon: 'CORE',
-    folder: 'Second Brain',
-    color: '#6366f1',
-    tags: ['zettelkasten', 'atomic-note'],
-    desc: 'Ghi chú nguyên tử kết nối tri thức hai chiều theo chuẩn Niklas Luhmann.',
-    content: `# [Tên Khái Niệm Nguyên Tử]
+  const NOTE_TEMPLATES = [
+    {
+      title: 'Architecture Decision Record (ADR)',
+      icon: 'ARCH',
+      folder: 'Engineering',
+      color: '#10b981',
+      tags: ['architecture', 'adr', 'system-design'],
+      content: `# ADR: Tên quyết định kiến trúc
 
-> **Tóm tắt 1 câu (Core Idea):** Giải thích ngắn gọn ý tưởng cốt lõi bằng ngôn từ của chính bạn.
+## Bối cảnh & Vấn đề (Context)
+Mô tả bài toán kỹ thuật, ràng buộc về hiệu năng/chi phí/bảo mật.
 
----
+## Phương án lựa chọn (Decision)
+- Giải pháp đã chọn và lý do kỹ thuật cốt lõi
+- Tài liệu liên quan: [[MindVault Architecture Hub]]
 
-## Phân tích Chuyên sâu
-- Luận điểm 1: ...
-- Luận điểm 2: ...
-
-## Mối liên hệ trong Mạng Tri thức
-- Dựa trên nền tảng của: [[MindVault Architecture Hub]]
-- Đối lập hoặc bổ sung cho: [[RAG & Vector Database Deep Dive]]
-
-## Hành động tiếp theo
-- [ ] Kiểm chứng ý tưởng này trong dự án thực tế
+## Hệ quả & Rủi ro (Consequences)
+- [ ] Xác định các điểm nghẽn có thể phát sinh
+- [ ] Viết benchmark kiểm thử tải trước khi rollout
 `
-  },
-  {
-    title: 'Architecture Decision Record (ADR)',
-    icon: 'ADR',
-    folder: 'Engineering',
-    color: '#f59e0b',
-    tags: ['adr', 'system-design', 'architecture'],
-    desc: 'Tài liệu ghi nhận quyết định kiến trúc phần mềm chuẩn kỹ sư hệ thống.',
-    content: `# ADR: [Tên Quyết Định Kiến Trúc]
+    },
+    {
+      title: 'AI & LLM Security Review',
+      icon: 'SEC',
+      folder: 'AI & Security',
+      color: '#ef4444',
+      tags: ['security', 'llm', 'owasp'],
+      content: `# Đánh giá Bảo mật Mô hình & Dữ liệu
 
-- **Trạng thái:** Đã phê duyệt (Accepted)
-- **Liên kết hệ thống:** [[Zero-Dependency Full-Stack Architecture]]
+## Bề mặt tấn công (Attack Surface)
+- Prompt Injection (Direct / Indirect)
+- PII Leakage trong context window
+- Unbounded token consumption
 
----
-
-## 1. Bối cảnh & Bài toán (Context)
-Mô tả vấn đề kỹ thuật hoặc giới hạn hệ thống cần giải quyết.
-
-## 2. Quyết định (Decision)
-Chúng ta quyết định lựa chọn giải pháp **...** vì những ưu điểm vượt trội về hiệu năng và độ tin cậy.
-
-## 3. Hệ quả & Đánh đổi (Consequences)
-- **Tích cực:** Giảm độ trễ, dễ bảo trì.
-- **Đánh đổi:** Cần kiểm soát chặt chẽ theo [[LLM Security Gateway Design]].
-
-## Checklist Triển khai
-- [ ] Viết Unit Test & Benchmark hiệu năng
-- [ ] Cập nhật sơ đồ kiến trúc
+## Kiểm soát đề xuất (Mitigations)
+- [ ] Bật PII redaction trước khi gửi dữ liệu ra ngoài
+- [ ] Áp dụng strict schema validation cho mọi tool output
+- [ ] Tham chiếu chuẩn: [[OWASP Top 10 for LLM Apps]]
 `
-  },
-  {
-    title: 'AI Paper / Model Research Note',
-    icon: 'LLM',
-    folder: 'AI & Security',
-    color: '#ec4899',
-    tags: ['ai-research', 'paper', 'llm'],
-    desc: 'Mẫu tổng hợp bài báo khoa học AI/ML, kiến trúc mô hình và thực nghiệm.',
-    content: `# Research: [Tên Bài Báo / Mô Hình AI]
+    },
+    {
+      title: 'Zettelkasten Atomic Note',
+      icon: 'CORE',
+      folder: 'Second Brain',
+      color: '#06b6d4',
+      tags: ['zettelkasten', 'atomic-note', 'knowledge'],
+      content: `# Ý tưởng Cốt lõi (Atomic Concept)
 
-## Đóng góp Chính (Key Contributions)
-1. Kiến trúc mới giúp tối ưu hóa...
-2. Cải thiện độ chính xác trên tập benchmark...
+> *"Viết ngắn gọn một khái niệm duy nhất bằng ngôn từ của chính bạn."*
 
-## Phương pháp & Công thức
-\`\`\`python
-def attention_block(query, key, value):
-    # Mô tả thuật toán cốt lõi
-    pass
-\`\`\`
+## Phân tích chi tiết
+Diễn giải bản chất vấn đề, tránh sao chép nguyên văn từ nguồn ngoài.
 
-## Liên kết Hệ sinh thái
-- Tích hợp vào pipeline: [[RAG & Vector Database Deep Dive]]
-- Đánh giá an toàn qua: [[LLM Security Gateway Design]]
-
-## Thực nghiệm cần chạy
-- [ ] Tải weights và chạy thử nghiệm suy luận (Inference)
-- [ ] Đo tốc độ tokens/sec
+## Liên kết tri thức
+- Kết nối với: [[Zettelkasten & Second Brain]]
+- Ứng dụng thực tế: [[RAG Pipeline & Vector Search]]
 `
-  },
-  {
-    title: 'Weekly Sprint & Deep Work Plan',
-    icon: 'PLAN',
-    folder: 'Productivity',
-    color: '#10b981',
-    tags: ['sprint', 'planning', 'deep-work'],
-    desc: 'Kế hoạch mục tiêu tuần kết hợp phương pháp Pomodoro Deep Work.',
-    content: `# Kế Hoạch Sprint & Deep Work Tuần Này
+    },
+    {
+      title: 'Weekly Engineering Sprint Review',
+      icon: 'OPS',
+      folder: 'Productivity',
+      color: '#f59e0b',
+      tags: ['sprint', 'review', 'planning'],
+      content: `# Sprint Review & Deep Work Plan
 
-Kết nối cùng lộ trình [[2026 Portfolio & Open Source Roadmap]] và quy tắc [[Deep Work & Pomodoro Protocol]].
+## Kết quả đạt được tuần này
+- [x] Hoàn thiện kiến trúc lõi và benchmark ban đầu
+- [ ] Rà soát nợ kỹ thuật và tối ưu bộ nhớ
 
----
-
-## 3 Mục tiêu Trọng tâm (Top 3 Outcomes)
-- [ ] Hoàn thành tính năng cốt lõi cho dự án trên GitHub
-- [ ] Viết 2 ghi chú kỹ thuật chất lượng cao vào [[MindVault Architecture Hub]]
-- [ ] Đạt tối thiểu 10 phiên tập trung Pomodoro (250 phút Deep Work)
-
-## Nhật ký Cải tiến
-- Những điểm làm tốt: ...
-- Những điểm cần tối ưu: ...
+## Mục tiêu ưu tiên tuần tới
+- [ ] Triển khai kiểm thử tự động end-to-end
+- [ ] Tham chiếu ghi chú: [[Deep Work & Pomodoro Metrics]]
 `
-  }
-];
+    }
+  ];
 
-/* ============================================================================
- * API HELPERS
- * ============================================================================ */
-async function apiFetch(url, options = {}) {
-  const res = await fetch(url, {
-    headers: { 'Content-Type': 'application/json' },
-    ...options
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: 'Network error' }));
-    throw new Error(err.error || `HTTP ${res.status}`);
-  }
-  return res.json();
-}
-
-async function loadAllData(selectFirst = false) {
-  const [{ notes }, stats, graph] = await Promise.all([
-    apiFetch('/api/notes'),
-    apiFetch('/api/stats'),
-    apiFetch('/api/graph')
-  ]);
-
-  state.notes = notes;
-  state.stats = stats;
-  state.graphData = graph;
-
-  if (selectFirst && notes.length > 0 && !state.activeNoteId) {
-    state.activeNoteId = notes[0].id;
-  } else if (state.activeNoteId && !notes.some(n => n.id === state.activeNoteId)) {
-    state.activeNoteId = notes[0] ? notes[0].id : null;
-  }
-
-  renderSidebar();
-  renderActiveNote();
-  if (state.activeView === 'graph') initOrUpdateGraph();
-  if (state.activeView === 'tasks') renderTasksHub();
-  if (state.activeView === 'insights') renderInsightsHub();
-}
-
-/* ============================================================================
- * CUSTOM MARKDOWN & WIKI-LINK PARSER
- * ============================================================================ */
-function escapeHtml(str) {
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-}
-
-function parseInlineMarkdown(text) {
-  let out = escapeHtml(text);
-
-  // Inline code
-  out = out.replace(/`([^`]+)`/g, '<code>$1</code>');
-
-  // Wiki-links [[Note Title]]
-  out = out.replace(/\[\[([^\]]+)\]\]/g, (_, target) => {
-    const clean = target.trim();
-    return `<a class="wiki-link" data-wikilink="${clean.replace(/"/g, '&quot;')}">[[${clean}]]</a>`;
-  });
-
-  // Bold & Italic
-  out = out.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-  out = out.replace(/\*([^*]+)\*/g, '<em>$1</em>');
-
-  // Standard links [text](url)
-  out = out.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
-
-  return out;
-}
-
-function renderMarkdown(mdText) {
-  if (!mdText) return '<p style="color: var(--text-muted)">Chưa có nội dung...</p>';
-
-  const lines = mdText.split('\n');
-  let html = '';
-  let inCodeBlock = false;
-  let codeBuffer = [];
-  let inList = false;
-  let inTable = false;
-  let tableRows = [];
-
-  const flushList = () => {
-    if (inList) {
-      html += '</ul>';
-      inList = false;
+  const state = {
+    runtimeMode: 'browser', // 'sqlite' | 'browser'
+    theme: 'dark',
+    notes: [],
+    activeNoteId: null,
+    activeView: 'editor', // 'editor' | 'graph' | 'tasks' | 'insights'
+    editorLayout: 'split', // 'edit' | 'split' | 'preview'
+    filter: {
+      search: '',
+      folder: null,
+      tag: null,
+      favoriteOnly: false
+    },
+    taskFilter: 'all',
+    graphSearch: '',
+    stats: null,
+    saveTimer: null,
+    isSaving: false,
+    pomo: {
+      totalSeconds: 25 * 60,
+      remainingSeconds: 25 * 60,
+      running: false,
+      timerId: null
+    },
+    graph: {
+      nodes: [],
+      edges: [],
+      rafId: null,
+      panX: 0,
+      panY: 0,
+      scale: 1,
+      draggingNode: null,
+      panning: false,
+      pointerMoved: false,
+      lastX: 0,
+      lastY: 0,
+      hoveredNode: null,
+      initialized: false
     }
   };
 
-  const flushTable = () => {
-    if (!inTable || tableRows.length === 0) return;
-    html += '<table>';
-    tableRows.forEach((row, rIdx) => {
-      if (rIdx === 1 && row.every(c => /^[:-\s]+$/.test(c))) return;
-      const tag = rIdx === 0 ? 'th' : 'td';
-      html += '<tr>' + row.map(c => `<${tag}>${parseInlineMarkdown(c.trim())}</${tag}>`).join('') + '</tr>';
-    });
-    html += '</table>';
-    inTable = false;
-    tableRows = [];
+  const $ = (id) => document.getElementById(id);
+
+  const el = {
+    sidebarPanel: $('sidebarPanel'),
+    mobileBackdrop: $('mobileBackdrop'),
+    btnMobileMenu: $('btnMobileMenu'),
+    brandModeSubtitle: $('brandModeSubtitle'),
+    btnNewNote: $('btnNewNote'),
+    sidebarSearchInput: $('sidebarSearchInput'),
+    modeBtns: Array.from(document.querySelectorAll('.mode-btn')),
+    navNoteCount: $('navNoteCount'),
+    navLinkCount: $('navLinkCount'),
+    navTaskCount: $('navTaskCount'),
+    btnClearFilter: $('btnClearFilter'),
+    folderList: $('folderList'),
+    tagList: $('tagList'),
+    chkFavoriteOnly: $('chkFavoriteOnly'),
+    notesListContainer: $('notesListContainer'),
+    btnTemplates: $('btnTemplates'),
+    fileImportVault: $('fileImportVault'),
+    btnImportVault: $('btnImportVault'),
+    btnExportVault: $('btnExportVault'),
+    crumbFolder: $('crumbFolder'),
+    crumbTitle: $('crumbTitle'),
+    saveStatus: $('saveStatus'),
+    btnResetDemo: $('btnResetDemo'),
+    btnToggleTheme: $('btnToggleTheme'),
+    pomoTimeDisplay: $('pomoTimeDisplay'),
+    btnPomoToggle: $('btnPomoToggle'),
+    btnPomoReset: $('btnPomoReset'),
+    layoutBtns: Array.from(document.querySelectorAll('.layout-btn')),
+    views: {
+      editor: $('viewEditor'),
+      graph: $('viewGraph'),
+      tasks: $('viewTasks'),
+      insights: $('viewInsights')
+    },
+    btnPickIcon: $('btnPickIcon'),
+    noteTitleInput: $('noteTitleInput'),
+    noteFolderInput: $('noteFolderInput'),
+    noteColorInput: $('noteColorInput'),
+    btnTogglePin: $('btnTogglePin'),
+    btnToggleFav: $('btnToggleFav'),
+    btnExportMd: $('btnExportMd'),
+    btnDeleteNote: $('btnDeleteNote'),
+    activeNoteTags: $('activeNoteTags'),
+    tagAddInput: $('tagAddInput'),
+    mdToolBtns: Array.from(document.querySelectorAll('.md-tool-btn')),
+    editorSplitContainer: $('editorSplitContainer'),
+    noteContentInput: $('noteContentInput'),
+    markdownPreview: $('markdownPreview'),
+    outgoingLinksList: $('outgoingLinksList'),
+    backlinksList: $('backlinksList'),
+    statWords: $('statWords'),
+    statReadTime: $('statReadTime'),
+    statTasksInNote: $('statTasksInNote'),
+    statUpdatedAt: $('statUpdatedAt'),
+    graphSearchInput: $('graphSearchInput'),
+    btnGraphResetZoom: $('btnGraphResetZoom'),
+    btnGraphRepulse: $('btnGraphRepulse'),
+    knowledgeGraphCanvas: $('knowledgeGraphCanvas'),
+    graphNodeTooltip: $('graphNodeTooltip'),
+    tasksHubList: $('tasksHubList'),
+    taskTabs: Array.from(document.querySelectorAll('.task-tab')),
+    insightsKpiGrid: $('insightsKpiGrid'),
+    folderDistChart: $('folderDistChart'),
+    tagDistChart: $('tagDistChart'),
+    focusHistoryList: $('focusHistoryList'),
+    cmdPaletteModal: $('cmdPaletteModal'),
+    cmdSearchInput: $('cmdSearchInput'),
+    cmdResultsList: $('cmdResultsList'),
+    templatesModal: $('templatesModal'),
+    templatesList: $('templatesList'),
+    btnCloseTemplates: $('btnCloseTemplates'),
+    emojiPopover: $('emojiPopover'),
+    toastRoot: $('toastRoot')
   };
 
-  lines.forEach((rawLine, lineIdx) => {
-    const line = rawLine.replace(/\r$/, '');
+  /* --------------------------------------------------------------------------
+   * Utilities: Toast, Escaping, Relative Dates, Theme
+   * ------------------------------------------------------------------------ */
 
-    // Code block toggle
-    if (line.trim().startsWith('```')) {
-      flushList();
-      flushTable();
-      if (!inCodeBlock) {
-        inCodeBlock = true;
-        codeBuffer = [];
+  function escapeHtml(str) {
+    return String(str || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function showToast(message, tone = 'emerald') {
+    if (!el.toastRoot) return;
+    const toast = document.createElement('div');
+    toast.className = 'toast';
+    if (tone === 'amber') {
+      toast.style.borderLeftColor = 'var(--accent-amber)';
+    } else if (tone === 'rose') {
+      toast.style.borderLeftColor = 'var(--accent-rose)';
+    }
+    toast.textContent = message;
+    el.toastRoot.appendChild(toast);
+    setTimeout(() => {
+      toast.style.opacity = '0';
+      toast.style.transform = 'translateY(6px)';
+      toast.style.transition = 'opacity 0.2s ease, transform 0.2s ease';
+      setTimeout(() => toast.remove(), 220);
+    }, 3000);
+  }
+
+  function formatRelativeTime(isoString) {
+    if (!isoString) return 'Vừa xong';
+    const diffSec = Math.max(0, Math.floor((Date.now() - new Date(isoString).getTime()) / 1000));
+    if (diffSec < 45) return 'Vừa xong';
+    if (diffSec < 3600) return `${Math.floor(diffSec / 60)} phút trước`;
+    if (diffSec < 86400) return `${Math.floor(diffSec / 3600)} giờ trước`;
+    return `${Math.floor(diffSec / 86400)} ngày trước`;
+  }
+
+  function getSavedTheme() {
+    try {
+      const saved = localStorage.getItem('mindvault_theme');
+      if (saved === 'light' || saved === 'dark') return saved;
+    } catch {
+      // Ignore storage errors
+    }
+    return 'dark';
+  }
+
+  function applyTheme(theme) {
+    const next = theme === 'light' ? 'light' : 'dark';
+    state.theme = next;
+    document.documentElement.dataset.theme = next;
+    if (el.btnToggleTheme) {
+      el.btnToggleTheme.textContent = next === 'light' ? 'Giao diện Tối' : 'Giao diện Sáng';
+    }
+    try {
+      localStorage.setItem('mindvault_theme', next);
+    } catch {
+      // Ignore storage errors
+    }
+    if (state.activeView === 'graph') {
+      drawScene();
+    }
+  }
+
+  function updateRuntimeIndicators(textOverride) {
+    const isSqlite = state.runtimeMode === 'sqlite';
+    if (el.brandModeSubtitle) {
+      el.brandModeSubtitle.textContent = isSqlite
+        ? 'SQLite WAL Engine · v2.0'
+        : 'Live Demo (Trình duyệt) · v2.0';
+    }
+    if (el.saveStatus) {
+      if (textOverride) {
+        el.saveStatus.textContent = textOverride;
       } else {
-        html += `<pre><code>${escapeHtml(codeBuffer.join('\n'))}</code></pre>`;
-        inCodeBlock = false;
+        el.saveStatus.textContent = isSqlite
+          ? '● Đã đồng bộ SQLite'
+          : '● Live Demo (Trình duyệt)';
       }
+    }
+    if (el.btnResetDemo) {
+      el.btnResetDemo.classList.toggle('hidden', isSqlite);
+    }
+  }
+
+  /* --------------------------------------------------------------------------
+   * Hybrid Runtime Detection & REST API Abstraction
+   * ------------------------------------------------------------------------ */
+
+  async function detectRuntimeMode() {
+    if (window.location.protocol !== 'http:' && window.location.protocol !== 'https:') {
+      state.runtimeMode = 'browser';
+      updateRuntimeIndicators();
       return;
     }
-
-    if (inCodeBlock) {
-      codeBuffer.push(line);
-      return;
-    }
-
-    // Table row detection
-    if (line.trim().startsWith('|') && line.trim().endsWith('|')) {
-      flushList();
-      inTable = true;
-      const cells = line.trim().slice(1, -1).split('|');
-      tableRows.push(cells);
-      return;
-    } else if (inTable) {
-      flushTable();
-    }
-
-    // Horizontal rule
-    if (/^---+$/.test(line.trim())) {
-      flushList();
-      html += '<hr />';
-      return;
-    }
-
-    // Headings
-    const hMatch = line.match(/^(#{1,3})\s+(.+)$/);
-    if (hMatch) {
-      flushList();
-      const level = hMatch[1].length;
-      html += `<h${level}>${parseInlineMarkdown(hMatch[2])}</h${level}>`;
-      return;
-    }
-
-    // Blockquote
-    if (line.trim().startsWith('>')) {
-      flushList();
-      const quoteContent = line.replace(/^\s*>\s?/, '');
-      html += `<blockquote>${parseInlineMarkdown(quoteContent)}</blockquote>`;
-      return;
-    }
-
-    // Task checkbox item
-    const taskMatch = line.match(/^(\s*)[-*]\s+\[([ xX])\]\s+(.+)$/);
-    if (taskMatch) {
-      if (!inList) {
-        html += '<ul>';
-        inList = true;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 1400);
+    try {
+      const res = await fetch('./api/stats', { signal: controller.signal });
+      clearTimeout(timer);
+      if (res.ok) {
+        const contentType = res.headers.get('content-type') || '';
+        if (contentType.includes('application/json')) {
+          const data = await res.json();
+          if (data && typeof data.noteCount === 'number') {
+            state.runtimeMode = 'sqlite';
+            updateRuntimeIndicators();
+            return;
+          }
+        }
       }
-      const checked = taskMatch[2].toLowerCase() === 'x';
-      html += `<li class="md-task-item ${checked ? 'done' : ''}">
-        <input type="checkbox" data-line="${lineIdx}" ${checked ? 'checked' : ''} />
-        <span>${parseInlineMarkdown(taskMatch[3])}</span>
-      </li>`;
-      return;
+    } catch {
+      clearTimeout(timer);
     }
+    state.runtimeMode = 'browser';
+    updateRuntimeIndicators();
+  }
 
-    // Bullet list
-    const listMatch = line.match(/^(\s*)[-*]\s+(.+)$/);
-    if (listMatch) {
-      if (!inList) {
-        html += '<ul>';
-        inList = true;
+  async function apiFetch(url, options = {}) {
+    if (state.runtimeMode === 'browser') {
+      if (!window.MindVaultLocalEngine) {
+        throw new Error('Không tìm thấy local-engine.js');
       }
-      html += `<li>${parseInlineMarkdown(listMatch[2])}</li>`;
-      return;
+      return window.MindVaultLocalEngine.handle(url, options);
     }
 
-    // Numbered list
-    const numMatch = line.match(/^\s*\d+\.\s+(.+)$/);
-    if (numMatch) {
-      if (!inList) {
-        html += '<ul>';
-        inList = true;
+    const endpoint = url.startsWith('./') ? url.slice(1) : url;
+    const res = await fetch(endpoint, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(options.headers || {})
       }
-      html += `<li>${parseInlineMarkdown(numMatch[1])}</li>`;
-      return;
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.error || `HTTP ${res.status}`);
+    }
+    return data;
+  }
+
+  /* --------------------------------------------------------------------------
+   * Mobile Navigation Drawer
+   * ------------------------------------------------------------------------ */
+
+  function openMobileMenu() {
+    if (el.sidebarPanel) el.sidebarPanel.classList.add('open');
+    if (el.mobileBackdrop) el.mobileBackdrop.classList.remove('hidden');
+  }
+
+  function closeMobileMenu() {
+    if (el.sidebarPanel) el.sidebarPanel.classList.remove('open');
+    if (el.mobileBackdrop) el.mobileBackdrop.classList.add('hidden');
+  }
+
+  /* --------------------------------------------------------------------------
+   * Data Loading & State Sync
+   * ------------------------------------------------------------------------ */
+
+  async function loadVault({ preserveActiveId = true } = {}) {
+    const [notesRes, statsRes] = await Promise.all([
+      apiFetch('/api/notes'),
+      apiFetch('/api/stats')
+    ]);
+    state.notes = notesRes.notes || [];
+    state.stats = statsRes;
+
+    if (!preserveActiveId || !state.notes.some(n => n.id === state.activeNoteId)) {
+      state.activeNoteId = state.notes.length ? state.notes[0].id : null;
     }
 
-    // Blank line
-    if (!line.trim()) {
-      flushList();
-      return;
+    renderSidebar();
+    renderActiveNote();
+    updateNavBadges();
+    if (state.activeView === 'tasks') renderTasksHub();
+    if (state.activeView === 'insights') renderInsights();
+  }
+
+  function getActiveNote() {
+    return state.notes.find(n => n.id === state.activeNoteId) || null;
+  }
+
+  function replaceNoteInState(updatedNote) {
+    const idx = state.notes.findIndex(n => n.id === updatedNote.id);
+    if (idx !== -1) {
+      state.notes[idx] = updatedNote;
+    } else {
+      state.notes.unshift(updatedNote);
+    }
+  }
+
+  function updateNavBadges() {
+    const stats = state.stats;
+    if (!stats) return;
+    if (el.navNoteCount) el.navNoteCount.textContent = String(stats.noteCount || 0);
+    if (el.navLinkCount) el.navLinkCount.textContent = String(stats.linkCount || 0);
+    if (el.navTaskCount) {
+      el.navTaskCount.textContent = `${stats.completedTasks || 0}/${stats.totalTasks || 0}`;
+    }
+  }
+
+  /* --------------------------------------------------------------------------
+   * Sidebar Rendering: Folders, Tags, Filtered Notes List
+   * ------------------------------------------------------------------------ */
+
+  function getFilteredNotes() {
+    const q = state.filter.search.trim().toLowerCase();
+    return state.notes.filter(note => {
+      if (state.filter.favoriteOnly && !note.favorite) return false;
+      if (state.filter.folder && note.folder !== state.filter.folder) return false;
+      if (state.filter.tag && !(note.tags || []).includes(state.filter.tag)) return false;
+      if (q) {
+        const haystack = [
+          note.title,
+          note.folder,
+          note.content,
+          (note.tags || []).join(' ')
+        ].join(' ').toLowerCase();
+        if (!haystack.includes(q)) return false;
+      }
+      return true;
+    });
+  }
+
+  function renderSidebar() {
+    // Directories
+    if (el.folderList) {
+      const folders = new Map();
+      state.notes.forEach(n => {
+        const f = n.folder || 'Inbox';
+        folders.set(f, (folders.get(f) || 0) + 1);
+      });
+      el.folderList.innerHTML = Array.from(folders.entries())
+        .sort((a, b) => b[1] - a[1])
+        .map(([folder, count]) => {
+          const active = state.filter.folder === folder ? 'active' : '';
+          return `<button type="button" class="filter-chip ${active}" data-folder="${escapeHtml(folder)}">${escapeHtml(folder)} <span>${count}</span></button>`;
+        })
+        .join('');
     }
 
-    flushList();
-    html += `<p>${parseInlineMarkdown(line)}</p>`;
-  });
-
-  flushList();
-  flushTable();
-  if (inCodeBlock) {
-    html += `<pre><code>${escapeHtml(codeBuffer.join('\n'))}</code></pre>`;
-  }
-
-  return html;
-}
-
-/* ============================================================================
- * SIDEBAR & NOTE LIST RENDERING
- * ============================================================================ */
-function getFilteredNotes() {
-  return state.notes.filter(n => {
-    if (state.filterFolder !== 'ALL' && n.folder.toLowerCase() !== state.filterFolder.toLowerCase()) {
-      return false;
+    // Tags
+    if (el.tagList) {
+      const tags = new Map();
+      state.notes.forEach(n => (n.tags || []).forEach(t => tags.set(t, (tags.get(t) || 0) + 1)));
+      el.tagList.innerHTML = Array.from(tags.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 14)
+        .map(([tag, count]) => {
+          const active = state.filter.tag === tag ? 'active' : '';
+          return `<button type="button" class="filter-chip ${active}" data-tag="${escapeHtml(tag)}">#${escapeHtml(tag)} <span>${count}</span></button>`;
+        })
+        .join('');
     }
-    if (state.filterTag && !n.tags.map(t => t.toLowerCase()).includes(state.filterTag.toLowerCase())) {
-      return false;
+
+    // Notes list
+    if (el.notesListContainer) {
+      const filtered = getFilteredNotes();
+      if (!filtered.length) {
+        el.notesListContainer.innerHTML = `
+          <div style="padding: 18px 10px; text-align: center; color: var(--text-muted); font-size: 12px;">
+            Không có tài liệu khớp bộ lọc.
+          </div>`;
+        return;
+      }
+
+      el.notesListContainer.innerHTML = filtered.map(note => {
+        const isActive = note.id === state.activeNoteId ? 'active' : '';
+        const cleanExcerpt = (note.content || '')
+          .replace(/^#\s+.*(?:\r?\n|$)/, '')
+          .replace(/^#+\s*/gm, '')
+          .replace(/\[\[([^\]]+)\]\]/g, '$1')
+          .replace(/[`*>_-]/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim()
+          .slice(0, 90);
+        const pinMark = note.pinned ? '<span style="color:var(--accent-primary-text);">PIN</span>' : '';
+        const favMark = note.favorite ? '<span style="color:var(--accent-amber);">★</span>' : '';
+        const linkTotal = (note.outgoingLinks?.length || 0) + (note.backlinks?.length || 0);
+
+        return `
+          <div class="note-card ${isActive}" data-note-id="${escapeHtml(note.id)}">
+            <div class="note-card-top">
+              <span class="note-card-icon">${escapeHtml(note.icon || 'DOC')}</span>
+              <span class="note-card-title">${escapeHtml(note.title)}</span>
+              <div class="note-card-badges">${pinMark}${favMark}</div>
+            </div>
+            <div class="note-card-excerpt">${escapeHtml(cleanExcerpt || 'Tài liệu trống...')}</div>
+            <div class="note-card-meta">
+              <span class="note-folder-pill">${escapeHtml(note.folder || 'Inbox')}</span>
+              <span>${note.wordCount || 0} từ · ${linkTotal} lk</span>
+            </div>
+          </div>`;
+      }).join('');
     }
-    if (state.filterFavorite && !n.favorite) {
-      return false;
-    }
-    if (state.searchQuery) {
-      const q = state.searchQuery.toLowerCase();
-      const match =
-        n.title.toLowerCase().includes(q) ||
-        n.content.toLowerCase().includes(q) ||
-        n.folder.toLowerCase().includes(q) ||
-        n.tags.some(t => t.toLowerCase().includes(q));
-      if (!match) return false;
-    }
-    return true;
-  });
-}
-
-function renderSidebar() {
-  // Badges
-  document.getElementById('navNoteCount').textContent = state.notes.length;
-  document.getElementById('navLinkCount').textContent = state.graphData.edges.length;
-  if (state.stats) {
-    document.getElementById('navTaskCount').textContent = `${state.stats.completedTasks}/${state.stats.totalTasks}`;
   }
 
-  // Folders
-  const folderCounts = (state.stats && state.stats.folderCounts) || {};
-  const folderListEl = document.getElementById('folderList');
-  folderListEl.innerHTML = Object.entries(folderCounts)
-    .map(([folder, count]) => {
-      const isActive = state.filterFolder.toLowerCase() === folder.toLowerCase();
-      return `<button class="filter-chip ${isActive ? 'active' : ''}" data-folder="${escapeHtml(folder)}">
-        <span>/${escapeHtml(folder)}</span>
-        <span style="opacity:0.6">${count}</span>
-      </button>`;
-    })
-    .join('');
+  /* --------------------------------------------------------------------------
+   * Markdown Parser & Live Preview + Bi-directional Connections
+   * ------------------------------------------------------------------------ */
 
-  // Tags
-  const tagCounts = (state.stats && state.stats.tagCounts) || {};
-  const tagListEl = document.getElementById('tagList');
-  tagListEl.innerHTML = Object.entries(tagCounts)
-    .sort((a, b) => b[1] - a[1])
-    .map(([tag, count]) => {
-      const isActive = state.filterTag.toLowerCase() === tag.toLowerCase();
-      return `<button class="filter-chip ${isActive ? 'active' : ''}" data-tag="${escapeHtml(tag)}">
-        <span>#${escapeHtml(tag)}</span>
-        <span style="opacity:0.6">${count}</span>
-      </button>`;
-    })
-    .join('');
-
-  // Filtered Notes List
-  const filtered = getFilteredNotes();
-  const container = document.getElementById('notesListContainer');
-
-  if (filtered.length === 0) {
-    container.innerHTML = `<div style="padding: 20px 10px; text-align:center; color: var(--text-muted); font-size:12.5px;">
-      Không tìm thấy tài liệu phù hợp.
-    </div>`;
-    return;
-  }
-
-  container.innerHTML = filtered
-    .map(n => {
-      const isActive = n.id === state.activeNoteId;
-      const cleanExcerpt = n.content
-        .replace(/^#+\s+.+$/gm, '')
-        .replace(/[#*`>\[\]-]/g, '')
-        .trim()
-        .slice(0, 95);
-
-      return `<div class="note-card ${isActive ? 'active' : ''}" data-noteid="${n.id}">
-        <div class="note-card-top">
-          <span class="note-card-icon">${escapeHtml(n.icon || 'DOC')}</span>
-          <span class="note-card-title">${escapeHtml(n.title)}</span>
-          <div class="note-card-badges">
-            ${n.pinned ? '<span style="color:var(--accent-indigo);font-family:var(--font-mono);font-size:10px">[PIN]</span>' : ''}
-            ${n.favorite ? '<span style="color:var(--accent-amber);font-family:var(--font-mono);font-size:10px">[*]</span>' : ''}
-          </div>
-        </div>
-        <div class="note-card-excerpt">${escapeHtml(cleanExcerpt || 'Tài liệu trống...')}</div>
-        <div class="note-card-meta">
-          <span class="note-folder-pill">${escapeHtml(n.folder)}</span>
-          <span>${n.outgoingLinks.length + n.backlinks.length} links · ${n.wordCount} từ</span>
-        </div>
-      </div>`;
-    })
-    .join('');
-}
-
-/* ============================================================================
- * ACTIVE NOTE EDITOR & PREVIEW RENDERING
- * ============================================================================ */
-function getActiveNote() {
-  return state.notes.find(n => n.id === state.activeNoteId) || null;
-}
-
-function renderActiveNote() {
-  const note = getActiveNote();
-  if (!note) return;
-
-  document.getElementById('crumbFolder').textContent = note.folder;
-  document.getElementById('crumbTitle').textContent = note.title;
-
-  document.getElementById('btnPickIcon').textContent = note.icon || 'DOC';
-  const titleInput = document.getElementById('noteTitleInput');
-  if (document.activeElement !== titleInput) {
-    titleInput.value = note.title;
-  }
-
-  const folderInput = document.getElementById('noteFolderInput');
-  if (document.activeElement !== folderInput) {
-    folderInput.value = note.folder;
-  }
-
-  document.getElementById('noteColorInput').value = note.color || '#6366f1';
-  document.getElementById('btnTogglePin').classList.toggle('active', note.pinned);
-  document.getElementById('btnToggleFav').classList.toggle('active', note.favorite);
-
-  const contentInput = document.getElementById('noteContentInput');
-  if (document.activeElement !== contentInput) {
-    contentInput.value = note.content;
-  }
-
-  // Render tags of active note
-  const tagsWrap = document.getElementById('activeNoteTags');
-  tagsWrap.innerHTML = note.tags
-    .map(
-      t => `<span class="tag-pill">#${escapeHtml(t)} <button data-removetag="${escapeHtml(t)}" title="Xóa tag">×</button></span>`
-    )
-    .join('');
-
-  updateLivePreviewAndConnections(note);
-}
-
-function updateLivePreviewAndConnections(note) {
-  const previewEl = document.getElementById('markdownPreview');
-  previewEl.innerHTML = renderMarkdown(note.content);
-
-  // Outgoing links
-  const outgoingEl = document.getElementById('outgoingLinksList');
-  if (!note.outgoingLinks || note.outgoingLinks.length === 0) {
-    outgoingEl.innerHTML = `<span style="color:var(--text-muted); font-size:12px;">Chưa có liên kết đi. Dùng <code>[[Tên bài]]</code> để thêm.</span>`;
-  } else {
-    outgoingEl.innerHTML = note.outgoingLinks
-      .map(targetTitle => {
-        const exists = state.notes.find(n => n.title.toLowerCase() === targetTitle.toLowerCase());
-        return `<button class="conn-chip" data-wikilink="${escapeHtml(targetTitle)}">
-          <span style="font-family:var(--font-mono);font-size:10px;color:var(--accent-indigo)">[${exists ? escapeHtml(exists.icon) : 'NEW'}]</span>
-          <span>${escapeHtml(targetTitle)}</span>
-        </button>`;
-      })
-      .join('');
-  }
-
-  // Backlinks
-  const backlinksEl = document.getElementById('backlinksList');
-  if (!note.backlinks || note.backlinks.length === 0) {
-    backlinksEl.innerHTML = `<span style="color:var(--text-muted); font-size:12px;">Chưa có tài liệu nào trỏ tới bài này.</span>`;
-  } else {
-    backlinksEl.innerHTML = note.backlinks
-      .map(
-        b => `<button class="conn-chip" data-openNoteId="${b.id}">
-          <span style="font-family:var(--font-mono);font-size:10px;color:var(--accent-emerald)">[${escapeHtml(b.icon || 'DOC')}]</span>
-          <span>${escapeHtml(b.title)}</span>
-        </button>`
-      )
-      .join('');
-  }
-
-  // Status bar metrics
-  const words = note.content.trim() ? note.content.trim().split(/\s+/).length : 0;
-  const readMin = Math.max(1, Math.ceil(words / 200));
-  const doneTasks = (note.tasks || []).filter(t => t.completed).length;
-  const totalTasks = (note.tasks || []).length;
-
-  document.getElementById('statWords').textContent = `${words} từ`;
-  document.getElementById('statReadTime').textContent = `~${readMin} phút đọc`;
-  document.getElementById('statTasksInNote').textContent = `${doneTasks}/${totalTasks} nhiệm vụ hoàn thành`;
-  document.getElementById('statUpdatedAt').textContent = `Lưu lúc ${new Date(note.updatedAt).toLocaleTimeString('vi-VN')}`;
-}
-
-function scheduleAutoSave(patch = {}) {
-  const note = getActiveNote();
-  if (!note) return;
-
-  const saveInd = document.getElementById('saveStatus');
-  saveInd.textContent = '● Đang đồng bộ...';
-  saveInd.style.color = 'var(--accent-amber)';
-
-  if (state.saveTimer) clearTimeout(state.saveTimer);
-  state.saveTimer = setTimeout(async () => {
-    const payload = {
-      title: document.getElementById('noteTitleInput').value.trim() || 'Untitled Note',
-      folder: document.getElementById('noteFolderInput').value.trim() || 'Inbox',
-      color: document.getElementById('noteColorInput').value,
-      content: document.getElementById('noteContentInput').value,
-      ...patch
+  function parseInlineMarkdown(rawLine) {
+    const clean = String(rawLine || '').replace(/[\uE000-\uE002]/g, '');
+    const tokens = [];
+    const stash = (html) => {
+      const idx = tokens.length;
+      tokens.push(html);
+      return `\uE000${idx}\uE001`;
     };
 
+    const tokenized = clean
+      .replace(/`([^`]+)`/g, (_, code) => stash(`<code>${escapeHtml(code)}</code>`))
+      .replace(/\[\[([^\]]+)\]\]/g, (_, targetRaw) => {
+        const target = targetRaw.trim();
+        return stash(
+          `<button type="button" class="wiki-link" data-wiki-target="${escapeHtml(target)}">[[${escapeHtml(target)}]]</button>`
+        );
+      })
+      .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, (_, label, url) =>
+        stash(`<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(label)}</a>`)
+      );
+
+    const formatted = escapeHtml(tokenized)
+      .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*([^*]+)\*/g, '<em>$1</em>');
+
+    return formatted.replace(/\uE000(\d+)\uE001/g, (_, idx) => tokens[Number(idx)] || '');
+  }
+
+  function renderMarkdownToHtml(markdown) {
+    const raw = String(markdown || '');
+    const codeBlocks = [];
+
+    const withPlaceholders = raw.replace(/```([a-zA-Z0-9_-]*)\n([\s\S]*?)```/g, (_, lang, code) => {
+      const idx = codeBlocks.length;
+      const safeCode = escapeHtml(code.replace(/\n$/, ''));
+      const langBadge = lang ? `<div style="font-size:10px;color:var(--text-muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.06em;">${escapeHtml(lang)}</div>` : '';
+      codeBlocks.push(`<pre>${langBadge}<code>${safeCode}</code></pre>`);
+      return `@@CODE_BLOCK_${idx}@@`;
+    });
+
+    const lines = withPlaceholders.split('\n');
+    const out = [];
+    let inUl = false;
+    let inOl = false;
+
+    const closeLists = () => {
+      if (inUl) { out.push('</ul>'); inUl = false; }
+      if (inOl) { out.push('</ol>'); inOl = false; }
+    };
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const trimmed = line.trim();
+
+      const blockMatch = trimmed.match(/^@@CODE_BLOCK_(\d+)@@$/);
+      if (blockMatch) {
+        closeLists();
+        out.push(codeBlocks[Number(blockMatch[1])]);
+        continue;
+      }
+
+      if (!trimmed) {
+        closeLists();
+        continue;
+      }
+
+      if (/^---+$/.test(trimmed)) {
+        closeLists();
+        out.push('<hr />');
+        continue;
+      }
+
+      // Markdown table row detection
+      if (trimmed.startsWith('|') && trimmed.endsWith('|')) {
+        closeLists();
+        const tableRows = [];
+        let j = i;
+        while (j < lines.length && lines[j].trim().startsWith('|') && lines[j].trim().endsWith('|')) {
+          tableRows.push(lines[j].trim());
+          j++;
+        }
+        if (tableRows.length >= 2 && /^\|(?:\s*:?-{2,}:?\s*\|)+$/.test(tableRows[1])) {
+          const splitCells = (row) => row.slice(1, -1).split('|').map(c => c.trim());
+          const headers = splitCells(tableRows[0]);
+          const bodyRows = tableRows.slice(2).map(splitCells);
+          out.push('<table><thead><tr>' + headers.map(h => `<th>${parseInlineMarkdown(h)}</th>`).join('') + '</tr></thead><tbody>');
+          bodyRows.forEach(r => {
+            out.push('<tr>' + r.map(c => `<td>${parseInlineMarkdown(c)}</td>`).join('') + '</tr>');
+          });
+          out.push('</tbody></table>');
+          i = j - 1;
+          continue;
+        }
+      }
+
+      const headingMatch = line.match(/^(#{1,4})\s+(.+)$/);
+      if (headingMatch) {
+        closeLists();
+        const lvl = headingMatch[1].length;
+        out.push(`<h${lvl}>${parseInlineMarkdown(headingMatch[2])}</h${lvl}>`);
+        continue;
+      }
+
+      const quoteMatch = line.match(/^>\s?(.*)$/);
+      if (quoteMatch) {
+        closeLists();
+        out.push(`<blockquote>${parseInlineMarkdown(quoteMatch[1])}</blockquote>`);
+        continue;
+      }
+
+      const taskMatch = line.match(/^\s*[-*]\s+\[([ xX])\]\s+(.+)$/);
+      if (taskMatch) {
+        if (inOl) { out.push('</ol>'); inOl = false; }
+        if (!inUl) { out.push('<ul>'); inUl = true; }
+        const checked = taskMatch[1].toLowerCase() === 'x';
+        out.push(
+          `<li class="md-task-item ${checked ? 'done' : ''}">` +
+          `<input type="checkbox" data-line-index="${i}" ${checked ? 'checked' : ''} />` +
+          `<span>${parseInlineMarkdown(taskMatch[2])}</span>` +
+          `</li>`
+        );
+        continue;
+      }
+
+      const ulMatch = line.match(/^\s*[-*]\s+(.+)$/);
+      if (ulMatch) {
+        if (inOl) { out.push('</ol>'); inOl = false; }
+        if (!inUl) { out.push('<ul>'); inUl = true; }
+        out.push(`<li>${parseInlineMarkdown(ulMatch[1])}</li>`);
+        continue;
+      }
+
+      const olMatch = line.match(/^\s*\d+\.\s+(.+)$/);
+      if (olMatch) {
+        if (inUl) { out.push('</ul>'); inUl = false; }
+        if (!inOl) { out.push('<ol>'); inOl = true; }
+        out.push(`<li>${parseInlineMarkdown(olMatch[1])}</li>`);
+        continue;
+      }
+
+      closeLists();
+      out.push(`<p>${parseInlineMarkdown(line)}</p>`);
+    }
+
+    closeLists();
+    return out.join('\n');
+  }
+
+  function extractLocalOutgoingLinks(content) {
+    const links = new Set();
+    const re = /\[\[([^\]]+)\]\]/g;
+    let m;
+    while ((m = re.exec(content || '')) !== null) {
+      if (m[1].trim()) links.add(m[1].trim());
+    }
+    return Array.from(links);
+  }
+
+  function countWords(text) {
+    if (!text || !text.trim()) return 0;
+    return text.trim().split(/\s+/).length;
+  }
+
+  function updateLivePreviewAndConnections() {
+    const note = getActiveNote();
+    const content = el.noteContentInput ? el.noteContentInput.value : '';
+
+    if (el.markdownPreview) {
+      el.markdownPreview.innerHTML = renderMarkdownToHtml(content);
+    }
+
+    const words = countWords(content);
+    const readMinutes = Math.max(1, Math.ceil(words / 200));
+    const taskLines = content.split('\n').filter(l => /^\s*[-*]\s+\[([ xX])\]\s+.+$/.test(l));
+    const doneTasks = taskLines.filter(l => /^\s*[-*]\s+\[[xX]\]\s+.+$/.test(l)).length;
+
+    if (el.statWords) el.statWords.textContent = `${words} từ`;
+    if (el.statReadTime) el.statReadTime.textContent = `${readMinutes} phút đọc`;
+    if (el.statTasksInNote) el.statTasksInNote.textContent = `${doneTasks}/${taskLines.length} nhiệm vụ`;
+    if (el.statUpdatedAt && note) el.statUpdatedAt.textContent = formatRelativeTime(note.updatedAt);
+
+    if (!note) return;
+
+    // Outgoing wiki-links
+    const outgoing = extractLocalOutgoingLinks(content);
+    if (el.outgoingLinksList) {
+      if (!outgoing.length) {
+        el.outgoingLinksList.innerHTML = '<span style="color:var(--text-muted);font-size:12px;">Chưa có liên kết [[Wiki-Link]]</span>';
+      } else {
+        el.outgoingLinksList.innerHTML = outgoing.map(target => {
+          const exists = state.notes.some(n => n.title.trim().toLowerCase() === target.toLowerCase());
+          const statusDot = exists
+            ? '<span style="color:var(--accent-primary-text);">●</span>'
+            : '<span style="color:var(--accent-amber);">+</span>';
+          return `<button type="button" class="conn-chip" data-wiki-target="${escapeHtml(target)}">${statusDot} ${escapeHtml(target)}</button>`;
+        }).join('');
+      }
+    }
+
+    // Backlinks
+    if (el.backlinksList) {
+      const backlinks = state.notes.filter(n =>
+        n.id !== note.id &&
+        (n.outgoingLinks || []).some(t => t.toLowerCase() === note.title.trim().toLowerCase())
+      );
+      if (!backlinks.length) {
+        el.backlinksList.innerHTML = '<span style="color:var(--text-muted);font-size:12px;">Chưa có tài liệu nào trỏ về</span>';
+      } else {
+        el.backlinksList.innerHTML = backlinks.map(b =>
+          `<button type="button" class="conn-chip" data-open-note-id="${escapeHtml(b.id)}"><span style="color:var(--accent-primary-text);">${escapeHtml(b.icon || 'DOC')}</span> ${escapeHtml(b.title)}</button>`
+        ).join('');
+      }
+    }
+  }
+
+  function renderActiveNoteTags(note) {
+    if (!el.activeNoteTags) return;
+    if (!note || !(note.tags || []).length) {
+      el.activeNoteTags.innerHTML = '';
+      return;
+    }
+    el.activeNoteTags.innerHTML = note.tags.map(tag => `
+      <span class="tag-pill">
+        #${escapeHtml(tag)}
+        <button type="button" data-remove-tag="${escapeHtml(tag)}" title="Xóa thẻ">×</button>
+      </span>
+    `).join('');
+  }
+
+  function renderActiveNote() {
+    const note = getActiveNote();
+    if (!note) {
+      if (el.crumbFolder) el.crumbFolder.textContent = 'Trống';
+      if (el.crumbTitle) el.crumbTitle.textContent = 'Chưa chọn tài liệu';
+      if (el.noteTitleInput) el.noteTitleInput.value = '';
+      if (el.noteContentInput) el.noteContentInput.value = '';
+      if (el.markdownPreview) el.markdownPreview.innerHTML = '<p style="color:var(--text-muted);">Hãy nhấn "+ Mới" để tạo tài liệu đầu tiên.</p>';
+      renderActiveNoteTags(null);
+      return;
+    }
+
+    if (el.crumbFolder) el.crumbFolder.textContent = note.folder || 'Inbox';
+    if (el.crumbTitle) el.crumbTitle.textContent = note.title || 'Untitled';
+    if (el.btnPickIcon) el.btnPickIcon.textContent = note.icon || 'DOC';
+    if (el.noteTitleInput) el.noteTitleInput.value = note.title || '';
+    if (el.noteFolderInput) el.noteFolderInput.value = note.folder || 'Inbox';
+    if (el.noteColorInput) el.noteColorInput.value = note.color || '#10b981';
+    if (el.noteContentInput) el.noteContentInput.value = note.content || '';
+
+    if (el.btnTogglePin) {
+      el.btnTogglePin.classList.toggle('active', Boolean(note.pinned));
+      el.btnTogglePin.textContent = note.pinned ? 'PINNED' : 'PIN';
+    }
+    if (el.btnToggleFav) {
+      el.btnToggleFav.classList.toggle('active', Boolean(note.favorite));
+      el.btnToggleFav.textContent = note.favorite ? 'STAR ★' : 'STAR';
+    }
+
+    renderActiveNoteTags(note);
+    updateLivePreviewAndConnections();
+  }
+
+  async function selectNote(noteId, switchToEditor = false) {
+    if (state.saveTimer) {
+      await flushPendingSave();
+    }
+    state.activeNoteId = noteId;
+    renderSidebar();
+    renderActiveNote();
+    closeMobileMenu();
+    if (switchToEditor) switchView('editor');
+  }
+
+  /* --------------------------------------------------------------------------
+   * Saving, Creating, Deleting, Exporting, Importing
+   * ------------------------------------------------------------------------ */
+
+  function scheduleSave() {
+    if (state.saveTimer) clearTimeout(state.saveTimer);
+    if (el.saveStatus) el.saveStatus.textContent = '● Đang soạn thảo...';
+    state.saveTimer = setTimeout(() => {
+      flushPendingSave();
+    }, 420);
+  }
+
+  async function flushPendingSave() {
+    if (state.saveTimer) {
+      clearTimeout(state.saveTimer);
+      state.saveTimer = null;
+    }
+    const note = getActiveNote();
+    if (!note || state.isSaving) return;
+
+    state.isSaving = true;
     try {
-      await apiFetch(`/api/notes/${note.id}`, {
+      const payload = {
+        title: (el.noteTitleInput?.value || 'Untitled Note').trim() || 'Untitled Note',
+        folder: (el.noteFolderInput?.value || 'Inbox').trim() || 'Inbox',
+        color: el.noteColorInput?.value || '#10b981',
+        content: el.noteContentInput?.value || '',
+        tags: note.tags || [],
+        icon: note.icon || 'DOC',
+        pinned: note.pinned,
+        favorite: note.favorite
+      };
+      const res = await apiFetch(`/api/notes/${encodeURIComponent(note.id)}`, {
         method: 'PUT',
         body: JSON.stringify(payload)
       });
-      await loadAllData(false);
-      saveInd.textContent = '● Đã đồng bộ SQLite';
-      saveInd.style.color = 'var(--accent-emerald)';
-    } catch (e) {
-      saveInd.textContent = '● Lỗi lưu!';
-      saveInd.style.color = 'var(--accent-rose)';
+      if (res.note) {
+        replaceNoteInState(res.note);
+        if (el.crumbFolder) el.crumbFolder.textContent = res.note.folder;
+        if (el.crumbTitle) el.crumbTitle.textContent = res.note.title;
+        if (el.statUpdatedAt) el.statUpdatedAt.textContent = formatRelativeTime(res.note.updatedAt);
+      }
+      state.stats = await apiFetch('/api/stats');
+      updateNavBadges();
+      renderSidebar();
+      updateRuntimeIndicators();
+    } catch (err) {
+      updateRuntimeIndicators(`● Lỗi lưu: ${err.message}`);
+    } finally {
+      state.isSaving = false;
     }
-  }, 320);
-}
-
-/* ============================================================================
- * INTERACTIVE 2D FORCE-DIRECTED KNOWLEDGE GRAPH ENGINE
- * ============================================================================ */
-const graphSim = {
-  nodes: [],
-  edges: [],
-  animId: null,
-  zoom: 1,
-  panX: 0,
-  panY: 0,
-  draggingNode: null,
-  isPanning: false,
-  lastMouseX: 0,
-  lastMouseY: 0,
-  hoveredNode: null,
-  repulsionBoost: 1
-};
-
-function initOrUpdateGraph() {
-  const canvas = document.getElementById('knowledgeGraphCanvas');
-  if (!canvas) return;
-  const rect = canvas.parentElement.getBoundingClientRect();
-  canvas.width = rect.width || 900;
-  canvas.height = rect.height || 620;
-
-  const cx = canvas.width / 2;
-  const cy = canvas.height / 2;
-
-  const oldMap = new Map(graphSim.nodes.map(n => [n.id, n]));
-
-  graphSim.nodes = state.graphData.nodes.map((n, idx) => {
-    const prev = oldMap.get(n.id);
-    const angle = (idx / Math.max(1, state.graphData.nodes.length)) * Math.PI * 2;
-    const radius = 140;
-    return {
-      ...n,
-      x: prev ? prev.x : cx + Math.cos(angle) * radius,
-      y: prev ? prev.y : cy + Math.sin(angle) * radius,
-      vx: prev ? prev.vx : 0,
-      vy: prev ? prev.vy : 0,
-      r: Math.min(30, 18 + (n.degree || 1) * 2.0)
-    };
-  });
-
-  graphSim.edges = state.graphData.edges.map(e => ({ ...e }));
-
-  if (!graphSim.animId) {
-    runGraphLoop();
   }
-}
 
-function runGraphLoop() {
-  const canvas = document.getElementById('knowledgeGraphCanvas');
-  if (!canvas) return;
-  const ctx = canvas.getContext('2d');
+  async function createNewNote(preset = {}) {
+    await flushPendingSave();
+    const res = await apiFetch('/api/notes', {
+      method: 'POST',
+      body: JSON.stringify({
+        title: preset.title || 'Tài liệu mới',
+        icon: preset.icon || 'DOC',
+        folder: preset.folder || state.filter.folder || 'Inbox',
+        color: preset.color || '#10b981',
+        tags: preset.tags || ['note'],
+        content: preset.content || `# ${preset.title || 'Tài liệu mới'}\n\nBắt đầu ghi chú hoặc tạo liên kết bằng \`[[MindVault Architecture Hub]]\`...\n\n- [ ] Hành động tiếp theo\n`
+      })
+    });
+    if (res.note) {
+      state.filter.folder = null;
+      state.filter.tag = null;
+      state.filter.search = '';
+      if (el.sidebarSearchInput) el.sidebarSearchInput.value = '';
+      await loadVault({ preserveActiveId: false });
+      state.activeNoteId = res.note.id;
+      renderSidebar();
+      renderActiveNote();
+      switchView('editor');
+      el.noteTitleInput?.focus();
+      el.noteTitleInput?.select();
+      showToast(`Đã tạo: ${res.note.title}`);
+    }
+  }
 
-  const stepPhysics = () => {
-    const nodes = graphSim.nodes;
-    const edges = graphSim.edges;
-    const cx = canvas.width / 2;
-    const cy = canvas.height / 2;
+  async function openOrCreateWikiTarget(targetTitle) {
+    const clean = (targetTitle || '').trim();
+    if (!clean) return;
+    const match = state.notes.find(n => n.title.trim().toLowerCase() === clean.toLowerCase());
+    if (match) {
+      await selectNote(match.id, true);
+      return;
+    }
+    await createNewNote({
+      title: clean,
+      icon: 'CORE',
+      folder: getActiveNote()?.folder || 'Second Brain',
+      tags: ['linked-note'],
+      content: `# ${clean}\n\nTài liệu được khởi tạo từ Wiki-Link trong [[${getActiveNote()?.title || 'MindVault Architecture Hub'}]].\n\n- [ ] Bổ sung nội dung chi tiết cho chủ đề này\n`
+    });
+  }
 
-    // 1. Coulomb Repulsion between all nodes
-    const repulsion = 5200 * graphSim.repulsionBoost;
-    for (let i = 0; i < nodes.length; i++) {
-      for (let j = i + 1; j < nodes.length; j++) {
-        const dx = nodes[j].x - nodes[i].x;
-        const dy = nodes[j].y - nodes[i].y;
-        const distSq = Math.max(400, dx * dx + dy * dy);
-        const force = repulsion / distSq;
+  async function deleteActiveNote() {
+    const note = getActiveNote();
+    if (!note) return;
+    if (state.notes.length <= 1) {
+      showToast('Cần giữ lại ít nhất 1 tài liệu trong kho.', 'amber');
+      return;
+    }
+    await apiFetch(`/api/notes/${encodeURIComponent(note.id)}`, { method: 'DELETE' });
+    showToast(`Đã xóa "${note.title}"`, 'rose');
+    await loadVault({ preserveActiveId: false });
+  }
+
+  function downloadBlob(filename, content, mimeType) {
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  async function exportActiveMarkdown() {
+    const note = getActiveNote();
+    if (!note) return;
+    const slug = (note.title || 'note')
+      .toLowerCase()
+      .replace(/[^a-z0-9\u00C0-\u024F\u1E00-\u1EFF]+/gi, '-')
+      .replace(/^-|-$/g, '') || 'mindvault-note';
+    downloadBlob(`${slug}.md`, el.noteContentInput?.value || note.content || '', 'text/markdown;charset=utf-8');
+    showToast(`Đã tải file ${slug}.md`);
+  }
+
+  async function exportVaultJson() {
+    const payload = await apiFetch('/api/export');
+    const date = new Date().toISOString().slice(0, 10);
+    downloadBlob(`mindvault-backup-${date}.json`, JSON.stringify(payload, null, 2), 'application/json;charset=utf-8');
+    showToast(`Đã sao lưu ${(payload.notes || []).length} tài liệu ra JSON`);
+  }
+
+  async function importVaultFile(file) {
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text);
+      const notes = Array.isArray(parsed) ? parsed : parsed.notes;
+      if (!Array.isArray(notes)) {
+        throw new Error('File JSON phải chứa mảng notes hợp lệ');
+      }
+      const res = await apiFetch('/api/import', {
+        method: 'POST',
+        body: JSON.stringify({ notes })
+      });
+      await loadVault({ preserveActiveId: true });
+      if (state.activeView === 'graph') await refreshGraphData();
+      showToast(`Đã nhập thành công ${res.imported || 0} tài liệu`);
+    } catch (err) {
+      showToast(`Lỗi Import JSON: ${err.message}`, 'rose');
+    } finally {
+      if (el.fileImportVault) el.fileImportVault.value = '';
+    }
+  }
+
+  /* --------------------------------------------------------------------------
+   * View Switching
+   * ------------------------------------------------------------------------ */
+
+  function switchView(viewName) {
+    state.activeView = viewName;
+    el.modeBtns.forEach(btn => btn.classList.toggle('active', btn.dataset.view === viewName));
+    Object.entries(el.views).forEach(([k, section]) => {
+      if (section) section.classList.toggle('active', k === viewName);
+    });
+
+    if (viewName === 'graph') {
+      startGraphView();
+    } else {
+      stopGraphLoop();
+    }
+    if (viewName === 'tasks') renderTasksHub();
+    if (viewName === 'insights') renderInsights();
+    closeMobileMenu();
+  }
+
+  function setEditorLayout(layout) {
+    state.editorLayout = layout;
+    el.layoutBtns.forEach(btn => btn.classList.toggle('active', btn.dataset.layout === layout));
+    if (el.editorSplitContainer) {
+      el.editorSplitContainer.classList.remove('layout-edit', 'layout-split', 'layout-preview');
+      el.editorSplitContainer.classList.add(`layout-${layout}`);
+    }
+  }
+
+  /* --------------------------------------------------------------------------
+   * View 2: Interactive 2D Force-Directed Knowledge Graph + Search Highlight
+   * ------------------------------------------------------------------------ */
+
+  async function refreshGraphData() {
+    const data = await apiFetch('/api/graph');
+    const prevById = new Map(state.graph.nodes.map(n => [n.id, n]));
+    const count = Math.max(1, (data.nodes || []).length);
+
+    state.graph.nodes = (data.nodes || []).map((node, idx) => {
+      const prev = prevById.get(node.id);
+      const angle = (idx / count) * Math.PI * 2;
+      const radius = 185 + (idx % 3) * 50;
+      return {
+        ...node,
+        x: prev ? prev.x : Math.cos(angle) * radius,
+        y: prev ? prev.y : Math.sin(angle) * radius,
+        vx: prev ? prev.vx : 0,
+        vy: prev ? prev.vy : 0,
+        r: Math.min(26, 12 + Math.sqrt((node.degree || 0) + 1) * 4)
+      };
+    });
+
+    const nodeById = new Map(state.graph.nodes.map(n => [n.id, n]));
+    state.graph.edges = (data.edges || [])
+      .map(e => ({
+        ...e,
+        sourceNode: nodeById.get(e.source),
+        targetNode: nodeById.get(e.target)
+      }))
+      .filter(e => e.sourceNode && e.targetNode);
+  }
+
+  function stepPhysics() {
+    const nodes = state.graph.nodes;
+    const edges = state.graph.edges;
+    const len = nodes.length;
+    if (!len) return;
+
+    // Pairwise Coulomb repulsion + mild center attraction
+    for (let i = 0; i < len; i++) {
+      const a = nodes[i];
+      if (state.graph.draggingNode === a) continue;
+      a.vx += -a.x * 0.0022;
+      a.vy += -a.y * 0.0022;
+
+      for (let j = i + 1; j < len; j++) {
+        const b = nodes[j];
+        let dx = b.x - a.x;
+        let dy = b.y - a.y;
+        let distSq = dx * dx + dy * dy;
+        if (distSq < 16) {
+          dx = 2.5;
+          dy = 2.5;
+          distSq = 12.5;
+        }
         const dist = Math.sqrt(distSq);
+        const force = 4200 / distSq;
         const fx = (dx / dist) * force;
         const fy = (dy / dist) * force;
-
-        nodes[i].vx -= fx;
-        nodes[i].vy -= fy;
-        nodes[j].vx += fx;
-        nodes[j].vy += fy;
+        if (state.graph.draggingNode !== a) {
+          a.vx -= fx;
+          a.vy -= fy;
+        }
+        if (state.graph.draggingNode !== b) {
+          b.vx += fx;
+          b.vy += fy;
+        }
       }
     }
 
-    // 2. Hooke Spring Attraction along Wiki-Link edges
-    const idealLength = 165;
-    const springK = 0.025;
-    const nodeById = new Map(nodes.map(n => [n.id, n]));
-
+    // Spring edges
     for (const edge of edges) {
-      const s = nodeById.get(edge.source);
-      const t = nodeById.get(edge.target);
-      if (!s || !t) continue;
-      const dx = t.x - s.x;
-      const dy = t.y - s.y;
+      const a = edge.sourceNode;
+      const b = edge.targetNode;
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
       const dist = Math.max(1, Math.sqrt(dx * dx + dy * dy));
-      const displacement = dist - idealLength;
-      const force = displacement * springK;
+      const targetLen = 185;
+      const force = (dist - targetLen) * 0.015;
       const fx = (dx / dist) * force;
       const fy = (dy / dist) * force;
-
-      s.vx += fx;
-      s.vy += fy;
-      t.vx -= fx;
-      t.vy -= fy;
-    }
-
-    // 3. Gentle center gravity + Velocity integration
-    for (const n of nodes) {
-      if (graphSim.draggingNode && graphSim.draggingNode.id === n.id) {
-        n.vx = 0;
-        n.vy = 0;
-        continue;
+      if (state.graph.draggingNode !== a) {
+        a.vx += fx;
+        a.vy += fy;
       }
-      n.vx += (cx - n.x) * 0.003;
-      n.vy += (cy - n.y) * 0.003;
-
-      n.vx *= 0.82; // damping
-      n.vy *= 0.82;
-
-      n.x += n.vx;
-      n.y += n.vy;
-    }
-  };
-
-  const drawScene = () => {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    // Subtle background grid
-    ctx.save();
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.025)';
-    ctx.lineWidth = 1;
-    const gridSize = 40 * graphSim.zoom;
-    for (let x = (graphSim.panX % gridSize); x < canvas.width; x += gridSize) {
-      ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, canvas.height);
-      ctx.stroke();
-    }
-    for (let y = (graphSim.panY % gridSize); y < canvas.height; y += gridSize) {
-      ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(canvas.width, y);
-      ctx.stroke();
-    }
-    ctx.restore();
-
-    ctx.save();
-    ctx.translate(graphSim.panX, graphSim.panY);
-    ctx.scale(graphSim.zoom, graphSim.zoom);
-
-    const nodeById = new Map(graphSim.nodes.map(n => [n.id, n]));
-
-    // Draw Edges
-    for (const edge of graphSim.edges) {
-      const s = nodeById.get(edge.source);
-      const t = nodeById.get(edge.target);
-      if (!s || !t) continue;
-
-      const isHighlighted =
-        graphSim.hoveredNode &&
-        (graphSim.hoveredNode.id === s.id || graphSim.hoveredNode.id === t.id);
-
-      ctx.beginPath();
-      ctx.moveTo(s.x, s.y);
-      ctx.lineTo(t.x, t.y);
-      ctx.strokeStyle = isHighlighted ? '#818cf8' : 'rgba(148, 163, 184, 0.28)';
-      ctx.lineWidth = isHighlighted ? 2.5 : 1.4;
-      ctx.stroke();
+      if (state.graph.draggingNode !== b) {
+        b.vx -= fx;
+        b.vy -= fy;
+      }
     }
 
-    // Draw Nodes
-    for (const n of graphSim.nodes) {
-      const isHovered = graphSim.hoveredNode && graphSim.hoveredNode.id === n.id;
-      const isActive = n.id === state.activeNoteId;
-
-      // Outer Glow
-      ctx.save();
-      ctx.beginPath();
-      ctx.arc(n.x, n.y, n.r + (isHovered || isActive ? 6 : 2), 0, Math.PI * 2);
-      ctx.fillStyle = isHovered || isActive ? 'rgba(99, 102, 241, 0.32)' : 'rgba(0, 0, 0, 0.2)';
-      ctx.fill();
-      ctx.restore();
-
-      // Main Circle
-      ctx.beginPath();
-      ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
-      ctx.fillStyle = n.color || '#6366f1';
-      ctx.fill();
-      ctx.lineWidth = isActive ? 3 : 1.5;
-      ctx.strokeStyle = isActive ? '#ffffff' : 'rgba(255, 255, 255, 0.4)';
-      ctx.stroke();
-
-      // Monospace code badge inside node
-      ctx.font = `700 10px JetBrains Mono, monospace`;
-      ctx.fillStyle = '#ffffff';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText((n.icon || 'DOC').slice(0, 4), n.x, n.y);
-
-      // Node Label below
-      ctx.font = '600 12px Inter, sans-serif';
-      ctx.fillStyle = isHovered ? '#ffffff' : '#cbd5e1';
-      ctx.fillText(n.title, n.x, n.y + n.r + 15);
+    // Integrate & damp
+    for (const node of nodes) {
+      if (state.graph.draggingNode === node) continue;
+      node.vx *= 0.86;
+      node.vy *= 0.86;
+      node.x += node.vx;
+      node.y += node.vy;
     }
+  }
 
-    ctx.restore();
-  };
-
-  const tick = () => {
-    if (state.activeView === 'graph') {
-      stepPhysics();
-      drawScene();
+  function resizeGraphCanvas() {
+    const canvas = el.knowledgeGraphCanvas;
+    if (!canvas || !canvas.parentElement) return null;
+    const rect = canvas.parentElement.getBoundingClientRect();
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const w = Math.max(300, Math.floor(rect.width));
+    const h = Math.max(240, Math.floor(rect.height));
+    if (canvas.width !== Math.floor(w * dpr) || canvas.height !== Math.floor(h * dpr)) {
+      canvas.width = Math.floor(w * dpr);
+      canvas.height = Math.floor(h * dpr);
     }
-    graphSim.animId = requestAnimationFrame(tick);
-  };
+    return { canvas, ctx: canvas.getContext('2d'), w, h, dpr };
+  }
 
-  graphSim.animId = requestAnimationFrame(tick);
-}
-
-function setupGraphCanvasInteractions() {
-  const canvas = document.getElementById('knowledgeGraphCanvas');
-  const tooltip = document.getElementById('graphNodeTooltip');
-
-  const toWorld = (clientX, clientY) => {
+  function screenToWorld(clientX, clientY) {
+    const canvas = el.knowledgeGraphCanvas;
+    if (!canvas) return { x: 0, y: 0 };
     const rect = canvas.getBoundingClientRect();
     const sx = clientX - rect.left;
     const sy = clientY - rect.top;
     return {
-      x: (sx - graphSim.panX) / graphSim.zoom,
-      y: (sy - graphSim.panY) / graphSim.zoom,
-      sx,
-      sy
+      x: (sx - rect.width / 2 - state.graph.panX) / state.graph.scale,
+      y: (sy - rect.height / 2 - state.graph.panY) / state.graph.scale
     };
-  };
+  }
 
-  const findNodeAt = (wx, wy) => {
-    for (let i = graphSim.nodes.length - 1; i >= 0; i--) {
-      const n = graphSim.nodes[i];
+  function findNodeAt(wx, wy) {
+    for (let i = state.graph.nodes.length - 1; i >= 0; i--) {
+      const n = state.graph.nodes[i];
       const dx = wx - n.x;
       const dy = wy - n.y;
-      if (dx * dx + dy * dy <= (n.r + 4) * (n.r + 4)) {
+      if (dx * dx + dy * dy <= (n.r + 6) * (n.r + 6)) {
         return n;
       }
     }
     return null;
-  };
-
-  let downTime = 0;
-
-  canvas.addEventListener('mousedown', e => {
-    const pt = toWorld(e.clientX, e.clientY);
-    const hit = findNodeAt(pt.x, pt.y);
-    downTime = Date.now();
-    graphSim.lastMouseX = e.clientX;
-    graphSim.lastMouseY = e.clientY;
-
-    if (hit) {
-      graphSim.draggingNode = hit;
-    } else {
-      graphSim.isPanning = true;
-    }
-  });
-
-  window.addEventListener('mousemove', e => {
-    if (state.activeView !== 'graph') return;
-    const pt = toWorld(e.clientX, e.clientY);
-
-    if (graphSim.draggingNode) {
-      graphSim.draggingNode.x = pt.x;
-      graphSim.draggingNode.y = pt.y;
-      return;
-    }
-
-    if (graphSim.isPanning) {
-      graphSim.panX += e.clientX - graphSim.lastMouseX;
-      graphSim.panY += e.clientY - graphSim.lastMouseY;
-      graphSim.lastMouseX = e.clientX;
-      graphSim.lastMouseY = e.clientY;
-      return;
-    }
-
-    const hit = findNodeAt(pt.x, pt.y);
-    graphSim.hoveredNode = hit;
-    if (hit) {
-      tooltip.classList.remove('hidden');
-      tooltip.style.left = `${pt.sx + 16}px`;
-      tooltip.style.top = `${pt.sy + 16}px`;
-      tooltip.innerHTML = `
-        <div style="font-weight:700; margin-bottom:4px;">[${escapeHtml(hit.icon)}] ${escapeHtml(hit.title)}</div>
-        <div style="color:var(--text-secondary); font-size:11.5px;">/${escapeHtml(hit.folder)} · ${hit.wordCount} từ · ${hit.degree} liên kết</div>
-        <div style="color:var(--accent-indigo); font-size:11px; margin-top:4px;">Click để mở tài liệu →</div>
-      `;
-    } else {
-      tooltip.classList.add('hidden');
-    }
-  });
-
-  window.addEventListener('mouseup', () => {
-    if (graphSim.draggingNode && Date.now() - downTime < 220) {
-      state.activeNoteId = graphSim.draggingNode.id;
-      switchView('editor');
-      renderSidebar();
-      renderActiveNote();
-    }
-    graphSim.draggingNode = null;
-    graphSim.isPanning = false;
-  });
-
-  canvas.addEventListener('wheel', e => {
-    e.preventDefault();
-    const factor = e.deltaY < 0 ? 1.1 : 0.9;
-    graphSim.zoom = Math.min(2.4, Math.max(0.45, graphSim.zoom * factor));
-  });
-}
-
-/* ============================================================================
- * VIEW 3: ACTION TASKS HUB
- * ============================================================================ */
-function renderTasksHub() {
-  const container = document.getElementById('tasksHubList');
-  const groups = [];
-
-  for (const note of state.notes) {
-    let tasks = note.tasks || [];
-    if (state.taskFilter === 'pending') tasks = tasks.filter(t => !t.completed);
-    if (state.taskFilter === 'done') tasks = tasks.filter(t => t.completed);
-    if (tasks.length > 0) {
-      groups.push({ note, tasks });
-    }
   }
 
-  if (groups.length === 0) {
-    container.innerHTML = `<div style="color:var(--text-muted); padding:24px;">Không có nhiệm vụ nào trong bộ lọc này.</div>`;
-    return;
-  }
+  function drawScene() {
+    const metrics = resizeGraphCanvas();
+    if (!metrics) return;
+    const { ctx, w, h, dpr } = metrics;
+    const isLight = state.theme === 'light';
+    const q = state.graphSearch.trim().toLowerCase();
 
-  container.innerHTML = groups
-    .map(
-      ({ note, tasks }) => `
-      <div class="task-group-card">
-        <div class="task-group-header">
-          <div class="task-group-title" data-openNoteId="${note.id}">
-            <span class="note-card-icon">${escapeHtml(note.icon || 'DOC')}</span>
-            <span>${escapeHtml(note.title)}</span>
-          </div>
-          <span class="note-folder-pill">${escapeHtml(note.folder)}</span>
-        </div>
-        <div>
-          ${tasks
-            .map(
-              t => `
-            <label class="task-row ${t.completed ? 'done' : ''}">
-              <input type="checkbox" data-tasknote="${note.id}" data-taskline="${t.lineIndex}" ${t.completed ? 'checked' : ''} />
-              <span>${parseInlineMarkdown(t.text)}</span>
-            </label>
-          `
-            )
-            .join('')}
-        </div>
-      </div>
-    `
-    )
-    .join('');
-}
-
-/* ============================================================================
- * VIEW 4: BRAIN ANALYTICS & INSIGHTS
- * ============================================================================ */
-function renderInsightsHub() {
-  const s = state.stats;
-  if (!s) return;
-
-  const taskRate = s.totalTasks > 0 ? Math.round((s.completedTasks / s.totalTasks) * 100) : 0;
-
-  document.getElementById('insightsKpiGrid').innerHTML = `
-    <div class="kpi-card">
-      <div class="kpi-label">Tổng Tài liệu Tri thức</div>
-      <div class="kpi-value">${s.noteCount}</div>
-      <div class="kpi-sub">Lưu trữ bền vững trên SQLite</div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-label">Liên kết Hai chiều (Wiki-Links)</div>
-      <div class="kpi-value">${s.linkCount}</div>
-      <div class="kpi-sub">Mạng lưới Zettelkasten</div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-label">Tổng Khối lượng Từ vựng</div>
-      <div class="kpi-value">${s.totalWords.toLocaleString('vi-VN')}</div>
-      <div class="kpi-sub">~${Math.max(1, Math.ceil(s.totalWords / 200))} phút đọc chuyên sâu</div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-label">Tỷ lệ Hoàn thành Nhiệm vụ</div>
-      <div class="kpi-value">${taskRate}%</div>
-      <div class="kpi-sub">${s.completedTasks}/${s.totalTasks} Action Items</div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-label">Thời gian Tập trung</div>
-      <div class="kpi-value">${s.focus.totalMinutes} <span style="font-size:15px">phút</span></div>
-      <div class="kpi-sub">${s.focus.sessionCount} phiên làm việc hoàn tất</div>
-    </div>
-  `;
-
-  // Folder chart
-  const folderEntries = Object.entries(s.folderCounts || {}).sort((a, b) => b[1] - a[1]);
-  const maxFolder = Math.max(1, ...folderEntries.map(x => x[1]));
-  document.getElementById('folderDistChart').innerHTML = folderEntries
-    .map(
-      ([name, count]) => `
-      <div class="bar-row">
-        <div class="bar-label-line">
-          <span>/${escapeHtml(name)}</span>
-          <span>${count} bài</span>
-        </div>
-        <div class="bar-track">
-          <div class="bar-fill" style="width:${Math.round((count / maxFolder) * 100)}%"></div>
-        </div>
-      </div>
-    `
-    )
-    .join('');
-
-  // Tag chart
-  const tagEntries = Object.entries(s.tagCounts || {}).sort((a, b) => b[1] - a[1]).slice(0, 8);
-  const maxTag = Math.max(1, ...tagEntries.map(x => x[1]));
-  document.getElementById('tagDistChart').innerHTML = tagEntries
-    .map(
-      ([name, count]) => `
-      <div class="bar-row">
-        <div class="bar-label-line">
-          <span>#${escapeHtml(name)}</span>
-          <span>${count} bài</span>
-        </div>
-        <div class="bar-track">
-          <div class="bar-fill" style="width:${Math.round((count / maxTag) * 100)}%"></div>
-        </div>
-      </div>
-    `
-    )
-    .join('');
-
-  // Focus sessions
-  const focusList = s.focus.recentSessions || [];
-  document.getElementById('focusHistoryList').innerHTML = focusList
-    .map(
-      f => `
-      <div class="focus-item">
-        <div><strong>${escapeHtml(f.note_title || 'Deep Work Session')}</strong></div>
-        <div style="color:var(--accent-emerald); font-family:var(--font-mono)">+${f.duration_minutes} phút · ${new Date(
-        f.completed_at
-      ).toLocaleDateString('vi-VN')}</div>
-      </div>
-    `
-    )
-    .join('');
-}
-
-/* ============================================================================
- * VIEW SWITCHING & UI EVENTS
- * ============================================================================ */
-function switchView(viewName) {
-  state.activeView = viewName;
-  document.querySelectorAll('.mode-btn').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.view === viewName);
-  });
-
-  document.getElementById('viewEditor').classList.toggle('active', viewName === 'editor');
-  document.getElementById('viewGraph').classList.toggle('active', viewName === 'graph');
-  document.getElementById('viewTasks').classList.toggle('active', viewName === 'tasks');
-  document.getElementById('viewInsights').classList.toggle('active', viewName === 'insights');
-
-  document.getElementById('editorLayoutGroup').style.display = viewName === 'editor' ? 'flex' : 'none';
-
-  if (viewName === 'graph') initOrUpdateGraph();
-  if (viewName === 'tasks') renderTasksHub();
-  if (viewName === 'insights') renderInsightsHub();
-}
-
-async function openOrCreateWikiLink(targetTitle) {
-  const existing = state.notes.find(n => n.title.trim().toLowerCase() === targetTitle.trim().toLowerCase());
-  if (existing) {
-    state.activeNoteId = existing.id;
-    switchView('editor');
-    renderSidebar();
-    renderActiveNote();
-    return;
-  }
-
-  // Auto-create linked note if it doesn't exist yet!
-  const current = getActiveNote();
-  const { note } = await apiFetch('/api/notes', {
-    method: 'POST',
-    body: JSON.stringify({
-      title: targetTitle.trim(),
-      icon: 'DOC',
-      folder: current ? current.folder : 'Second Brain',
-      tags: ['linked-note'],
-      content: `# ${targetTitle.trim()}\n\nTài liệu này được khởi tạo tự động từ liên kết hai chiều trong [[${
-        current ? current.title : 'MindVault Architecture Hub'
-      }]].\n\n## Nội dung chính\n- Viết ý tưởng của bạn tại đây...\n`
-    })
-  });
-
-  state.activeNoteId = note.id;
-  await loadAllData(false);
-  switchView('editor');
-}
-
-function setupEventListeners() {
-  // Mode navigation
-  document.querySelectorAll('.mode-btn').forEach(btn => {
-    btn.addEventListener('click', () => switchView(btn.dataset.view));
-  });
-
-  // Layout switcher (Edit / Split / Preview)
-  document.querySelectorAll('.layout-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('.layout-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      const container = document.getElementById('editorSplitContainer');
-      container.className = `editor-split-container layout-${btn.dataset.layout}`;
-    });
-  });
-
-  // Sidebar search
-  document.getElementById('sidebarSearchInput').addEventListener('input', e => {
-    state.searchQuery = e.target.value;
-    renderSidebar();
-  });
-
-  // Favorite filter
-  document.getElementById('chkFavoriteOnly').addEventListener('change', e => {
-    state.filterFavorite = e.target.checked;
-    renderSidebar();
-  });
-
-  // Clear filters
-  document.getElementById('btnClearFilter').addEventListener('click', () => {
-    state.filterFolder = 'ALL';
-    state.filterTag = '';
-    state.filterFavorite = false;
-    state.searchQuery = '';
-    document.getElementById('sidebarSearchInput').value = '';
-    document.getElementById('chkFavoriteOnly').checked = false;
-    renderSidebar();
-  });
-
-  // Folder & Tag filter delegation
-  document.getElementById('folderList').addEventListener('click', e => {
-    const chip = e.target.closest('[data-folder]');
-    if (!chip) return;
-    const f = chip.dataset.folder;
-    state.filterFolder = state.filterFolder === f ? 'ALL' : f;
-    renderSidebar();
-  });
-
-  document.getElementById('tagList').addEventListener('click', e => {
-    const chip = e.target.closest('[data-tag]');
-    if (!chip) return;
-    const t = chip.dataset.tag;
-    state.filterTag = state.filterTag === t ? '' : t;
-    renderSidebar();
-  });
-
-  // Select note from list
-  document.getElementById('notesListContainer').addEventListener('click', e => {
-    const card = e.target.closest('[data-noteid]');
-    if (!card) return;
-    state.activeNoteId = card.dataset.noteid;
-    if (state.activeView !== 'editor') switchView('editor');
-    renderSidebar();
-    renderActiveNote();
-  });
-
-  // Create new note
-  document.getElementById('btnNewNote').addEventListener('click', async () => {
-    const { note } = await apiFetch('/api/notes', {
-      method: 'POST',
-      body: JSON.stringify({
-        title: 'Tài liệu Kỹ thuật Mới',
-        icon: 'DOC',
-        folder: state.filterFolder !== 'ALL' ? state.filterFolder : 'Second Brain',
-        tags: ['draft'],
-        content: `# Tài liệu Kỹ thuật Mới\n\nKết nối với [[MindVault Architecture Hub]]...\n\n## Nhiệm vụ cần làm\n- [ ] Phác thảo ý tưởng cốt lõi\n`
-      })
-    });
-    state.activeNoteId = note.id;
-    await loadAllData(false);
-    switchView('editor');
-    document.getElementById('noteTitleInput').focus();
-    document.getElementById('noteTitleInput').select();
-  });
-
-  // Editor live changes
-  document.getElementById('noteTitleInput').addEventListener('input', () => scheduleAutoSave());
-  document.getElementById('noteFolderInput').addEventListener('input', () => scheduleAutoSave());
-  document.getElementById('noteColorInput').addEventListener('input', () => scheduleAutoSave());
-
-  document.getElementById('noteContentInput').addEventListener('input', e => {
-    const note = getActiveNote();
-    if (note) {
-      note.content = e.target.value;
-      updateLivePreviewAndConnections(note);
+    const matchedIds = new Set();
+    const neighborIds = new Set();
+    if (q) {
+      state.graph.nodes.forEach(n => {
+        const hay = `${n.title} ${n.folder} ${(n.tags || []).join(' ')}`.toLowerCase();
+        if (hay.includes(q)) matchedIds.add(n.id);
+      });
+      state.graph.edges.forEach(e => {
+        if (matchedIds.has(e.sourceNode.id)) neighborIds.add(e.targetNode.id);
+        if (matchedIds.has(e.targetNode.id)) neighborIds.add(e.sourceNode.id);
+      });
     }
-    scheduleAutoSave();
-  });
 
-  // Pin & Favorite toggles
-  document.getElementById('btnTogglePin').addEventListener('click', () => {
-    const note = getActiveNote();
-    if (!note) return;
-    scheduleAutoSave({ pinned: !note.pinned });
-  });
+    ctx.save();
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, w, h);
 
-  document.getElementById('btnToggleFav').addEventListener('click', () => {
-    const note = getActiveNote();
-    if (!note) return;
-    scheduleAutoSave({ favorite: !note.favorite });
-  });
+    // Subtle background grid
+    ctx.strokeStyle = isLight ? 'rgba(15, 23, 42, 0.05)' : 'rgba(148, 163, 184, 0.06)';
+    ctx.lineWidth = 1;
+    const grid = 44;
+    const offsetX = ((w / 2 + state.graph.panX) % grid + grid) % grid;
+    const offsetY = ((h / 2 + state.graph.panY) % grid + grid) % grid;
+    ctx.beginPath();
+    for (let gx = offsetX; gx < w; gx += grid) {
+      ctx.moveTo(gx, 0);
+      ctx.lineTo(gx, h);
+    }
+    for (let gy = offsetY; gy < h; gy += grid) {
+      ctx.moveTo(0, gy);
+      ctx.lineTo(w, gy);
+    }
+    ctx.stroke();
 
-  // Delete note
-  document.getElementById('btnDeleteNote').addEventListener('click', async () => {
-    const note = getActiveNote();
-    if (!note) return;
-    await apiFetch(`/api/notes/${note.id}`, { method: 'DELETE' });
-    state.activeNoteId = null;
-    await loadAllData(true);
-  });
+    ctx.translate(w / 2 + state.graph.panX, h / 2 + state.graph.panY);
+    ctx.scale(state.graph.scale, state.graph.scale);
 
-  // Export single Markdown file
-  document.getElementById('btnExportMd').addEventListener('click', () => {
-    const note = getActiveNote();
-    if (!note) return;
-    const blob = new Blob([note.content], { type: 'text/markdown;charset=utf-8' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `${note.title.replace(/[^a-zA-Z0-9_-]/g, '_')}.md`;
-    a.click();
-  });
+    const focusNode = state.graph.hoveredNode;
 
-  // Export entire vault JSON
-  document.getElementById('btnExportVault').addEventListener('click', async () => {
-    const data = await apiFetch('/api/export');
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json;charset=utf-8' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `mindvault-backup-${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
-  });
+    // Edges
+    for (const edge of state.graph.edges) {
+      const a = edge.sourceNode;
+      const b = edge.targetNode;
+      const isHoverConnected = focusNode && (a.id === focusNode.id || b.id === focusNode.id);
+      const isSearchConnected = !q || matchedIds.has(a.id) || matchedIds.has(b.id);
 
-  // Add & remove tags
-  document.getElementById('tagAddInput').addEventListener('keydown', e => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      const val = e.target.value.trim().replace(/^#/, '');
-      const note = getActiveNote();
-      if (val && note && !note.tags.includes(val)) {
-        const nextTags = [...note.tags, val];
-        e.target.value = '';
-        scheduleAutoSave({ tags: nextTags });
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+
+      if (isHoverConnected) {
+        ctx.strokeStyle = isLight ? 'rgba(5, 150, 105, 0.85)' : 'rgba(16, 185, 129, 0.85)';
+        ctx.lineWidth = 2.2;
+      } else if (!isSearchConnected) {
+        ctx.strokeStyle = isLight ? 'rgba(15, 23, 42, 0.06)' : 'rgba(148, 163, 184, 0.06)';
+        ctx.lineWidth = 1;
+      } else {
+        ctx.strokeStyle = isLight ? 'rgba(71, 85, 105, 0.28)' : 'rgba(148, 163, 184, 0.26)';
+        ctx.lineWidth = 1.3;
       }
+      ctx.stroke();
     }
-  });
 
-  document.getElementById('activeNoteTags').addEventListener('click', e => {
-    const btn = e.target.closest('[data-removetag]');
-    if (!btn) return;
-    const note = getActiveNote();
-    if (!note) return;
-    const nextTags = note.tags.filter(t => t !== btn.dataset.removetag);
-    scheduleAutoSave({ tags: nextTags });
-  });
+    // Nodes
+    for (const node of state.graph.nodes) {
+      const isActive = node.id === state.activeNoteId;
+      const isHovered = focusNode && focusNode.id === node.id;
+      let alpha = 1;
+      if (q) {
+        if (matchedIds.has(node.id)) alpha = 1;
+        else if (neighborIds.has(node.id)) alpha = 0.55;
+        else alpha = 0.16;
+      }
 
-  // Markdown formatting quick toolbar
-  document.querySelectorAll('.md-tool-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const textarea = document.getElementById('noteContentInput');
-      const snippet = btn.dataset.insert.replace(/\\n/g, '\n');
-      const start = textarea.selectionStart;
-      const end = textarea.selectionEnd;
-      const val = textarea.value;
-      textarea.value = val.slice(0, start) + snippet + val.slice(end);
-      textarea.focus();
-      textarea.dispatchEvent(new Event('input'));
+      ctx.save();
+      ctx.globalAlpha = alpha;
+
+      if (isActive || isHovered || (q && matchedIds.has(node.id))) {
+        ctx.beginPath();
+        ctx.arc(node.x, node.y, node.r + 6, 0, Math.PI * 2);
+        ctx.fillStyle = isLight ? 'rgba(5, 150, 105, 0.18)' : 'rgba(16, 185, 129, 0.24)';
+        ctx.fill();
+      }
+
+      ctx.beginPath();
+      ctx.arc(node.x, node.y, node.r, 0, Math.PI * 2);
+      ctx.fillStyle = node.color || '#10b981';
+      ctx.fill();
+      ctx.lineWidth = isActive || isHovered ? 2.5 : 1.5;
+      ctx.strokeStyle = isLight ? '#ffffff' : '#090c11';
+      ctx.stroke();
+
+      // Short code inside node
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '700 8.5px "JetBrains Mono", monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(String(node.icon || 'DOC').slice(0, 4), node.x, node.y);
+
+      // Node title below circle
+      ctx.font = `${isActive || isHovered ? '600' : '500'} 11.5px "Plus Jakarta Sans", sans-serif`;
+      ctx.fillStyle = isLight ? '#0f172a' : '#e2e8f0';
+      ctx.fillText(node.title, node.x, node.y + node.r + 13);
+
+      ctx.restore();
+    }
+
+    ctx.restore();
+  }
+
+  function startGraphLoop() {
+    if (state.graph.rafId) return;
+    const tick = () => {
+      if (state.activeView !== 'graph') {
+        state.graph.rafId = null;
+        return;
+      }
+      stepPhysics();
+      drawScene();
+      state.graph.rafId = requestAnimationFrame(tick);
+    };
+    state.graph.rafId = requestAnimationFrame(tick);
+  }
+
+  function stopGraphLoop() {
+    if (state.graph.rafId) {
+      cancelAnimationFrame(state.graph.rafId);
+      state.graph.rafId = null;
+    }
+  }
+
+  async function startGraphView() {
+    await refreshGraphData();
+    startGraphLoop();
+  }
+
+  function setupGraphEvents() {
+    const canvas = el.knowledgeGraphCanvas;
+    if (!canvas || state.graph.initialized) return;
+    state.graph.initialized = true;
+
+    canvas.addEventListener('mousedown', (e) => {
+      const world = screenToWorld(e.clientX, e.clientY);
+      const hit = findNodeAt(world.x, world.y);
+      state.graph.pointerMoved = false;
+      state.graph.lastX = e.clientX;
+      state.graph.lastY = e.clientY;
+      if (hit) {
+        state.graph.draggingNode = hit;
+      } else {
+        state.graph.panning = true;
+      }
     });
-  });
 
-  // Delegate clicks on Wiki-Links & Checkboxes inside Preview & Connections
-  document.getElementById('viewEditor').addEventListener('click', async e => {
-    const wiki = e.target.closest('[data-wikilink]');
-    if (wiki) {
-      e.preventDefault();
-      await openOrCreateWikiLink(wiki.dataset.wikilink);
-      return;
-    }
+    window.addEventListener('mousemove', (e) => {
+      if (state.activeView !== 'graph') return;
+      const dx = e.clientX - state.graph.lastX;
+      const dy = e.clientY - state.graph.lastY;
+      if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
+        state.graph.pointerMoved = true;
+      }
+      state.graph.lastX = e.clientX;
+      state.graph.lastY = e.clientY;
 
-    const openBtn = e.target.closest('[data-openNoteId]');
-    if (openBtn) {
-      state.activeNoteId = openBtn.getAttribute('data-openNoteId');
-      renderSidebar();
-      renderActiveNote();
-      return;
-    }
+      if (state.graph.draggingNode) {
+        const world = screenToWorld(e.clientX, e.clientY);
+        state.graph.draggingNode.x = world.x;
+        state.graph.draggingNode.y = world.y;
+        state.graph.draggingNode.vx = 0;
+        state.graph.draggingNode.vy = 0;
+        return;
+      }
 
-    if (e.target.matches('input[type="checkbox"][data-line]')) {
-      const note = getActiveNote();
-      if (!note) return;
-      const lineIndex = Number(e.target.dataset.line);
-      await apiFetch('/api/tasks/toggle', {
-        method: 'POST',
-        body: JSON.stringify({ noteId: note.id, lineIndex })
-      });
-      await loadAllData(false);
-    }
-  });
+      if (state.graph.panning) {
+        state.graph.panX += dx;
+        state.graph.panY += dy;
+        return;
+      }
 
-  // Delegate clicks in Action Tasks Hub
-  document.getElementById('viewTasks').addEventListener('click', async e => {
-    const openBtn = e.target.closest('[data-openNoteId]');
-    if (openBtn) {
-      state.activeNoteId = openBtn.getAttribute('data-openNoteId');
-      switchView('editor');
-      renderSidebar();
-      renderActiveNote();
-      return;
-    }
-
-    if (e.target.matches('input[type="checkbox"][data-tasknote]')) {
-      const noteId = e.target.dataset.tasknote;
-      const lineIndex = Number(e.target.dataset.taskline);
-      await apiFetch('/api/tasks/toggle', {
-        method: 'POST',
-        body: JSON.stringify({ noteId, lineIndex })
-      });
-      await loadAllData(false);
-    }
-  });
-
-  document.querySelectorAll('.task-tab').forEach(tab => {
-    tab.addEventListener('click', () => {
-      document.querySelectorAll('.task-tab').forEach(t => t.classList.remove('active'));
-      tab.classList.add('active');
-      state.taskFilter = tab.dataset.tfilter;
-      renderTasksHub();
-    });
-  });
-
-  // Graph controls
-  document.getElementById('btnGraphResetZoom').addEventListener('click', () => {
-    graphSim.zoom = 1;
-    graphSim.panX = 0;
-    graphSim.panY = 0;
-    graphSim.repulsionBoost = 1;
-  });
-
-  document.getElementById('btnGraphRepulse').addEventListener('click', () => {
-    graphSim.repulsionBoost = graphSim.repulsionBoost === 1 ? 2.2 : 1;
-  });
-
-  // Badge Label Picker
-  const emojiPopover = document.getElementById('emojiPopover');
-  emojiPopover.innerHTML = EMOJI_LIST.map(em => `<button class="emoji-choice" data-emoji="${em}">${em}</button>`).join('');
-
-  document.getElementById('btnPickIcon').addEventListener('click', e => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    emojiPopover.style.left = `${rect.left}px`;
-    emojiPopover.style.top = `${rect.bottom + 6}px`;
-    emojiPopover.classList.toggle('hidden');
-  });
-
-  emojiPopover.addEventListener('click', e => {
-    const btn = e.target.closest('[data-emoji]');
-    if (!btn) return;
-    document.getElementById('btnPickIcon').textContent = btn.dataset.emoji;
-    emojiPopover.classList.add('hidden');
-    scheduleAutoSave({ icon: btn.dataset.emoji });
-  });
-
-  // Templates Modal
-  const templatesModal = document.getElementById('templatesModal');
-  document.getElementById('templatesList').innerHTML = SMART_TEMPLATES.map(
-    (tpl, idx) => `
-    <div class="template-card" data-tplidx="${idx}">
-      <h4>[${tpl.icon}] ${escapeHtml(tpl.title)}</h4>
-      <p>${escapeHtml(tpl.desc)}</p>
-    </div>
-  `
-  ).join('');
-
-  document.getElementById('btnTemplates').addEventListener('click', () => {
-    templatesModal.classList.remove('hidden');
-  });
-
-  document.getElementById('btnCloseTemplates').addEventListener('click', () => {
-    templatesModal.classList.add('hidden');
-  });
-
-  document.getElementById('templatesList').addEventListener('click', async e => {
-    const card = e.target.closest('[data-tplidx]');
-    if (!card) return;
-    const tpl = SMART_TEMPLATES[Number(card.dataset.tplidx)];
-    templatesModal.classList.add('hidden');
-
-    const { note } = await apiFetch('/api/notes', {
-      method: 'POST',
-      body: JSON.stringify({
-        title: tpl.title,
-        icon: tpl.icon,
-        folder: tpl.folder,
-        color: tpl.color,
-        tags: tpl.tags,
-        content: tpl.content
-      })
-    });
-    state.activeNoteId = note.id;
-    await loadAllData(false);
-    switchView('editor');
-  });
-
-  // Pomodoro Timer
-  const updatePomoUI = () => {
-    const m = String(Math.floor(state.pomo.secondsLeft / 60)).padStart(2, '0');
-    const s = String(state.pomo.secondsLeft % 60).padStart(2, '0');
-    document.getElementById('pomoTimeDisplay').textContent = `${m}:${s}`;
-    document.getElementById('btnPomoToggle').textContent = state.pomo.running ? '||' : '▶';
-  };
-
-  document.getElementById('btnPomoToggle').addEventListener('click', () => {
-    state.pomo.running = !state.pomo.running;
-    if (state.pomo.running) {
-      state.pomo.interval = setInterval(async () => {
-        state.pomo.secondsLeft--;
-        if (state.pomo.secondsLeft <= 0) {
-          clearInterval(state.pomo.interval);
-          state.pomo.running = false;
-          state.pomo.secondsLeft = 25 * 60;
-          const active = getActiveNote();
-          await apiFetch('/api/focus', {
-            method: 'POST',
-            body: JSON.stringify({
-              noteId: active ? active.id : null,
-              noteTitle: active ? active.title : 'Deep Work Session',
-              durationMinutes: 25
-            })
-          });
-          await loadAllData(false);
+      const world = screenToWorld(e.clientX, e.clientY);
+      const hit = findNodeAt(world.x, world.y);
+      state.graph.hoveredNode = hit;
+      if (el.graphNodeTooltip) {
+        if (hit) {
+          const rect = canvas.getBoundingClientRect();
+          el.graphNodeTooltip.innerHTML = `
+            <div style="font-weight:700;color:var(--text-primary);margin-bottom:3px;">${escapeHtml(hit.title)}</div>
+            <div style="font-size:11px;color:var(--accent-primary-text);font-family:var(--font-mono);margin-bottom:4px;">${escapeHtml(hit.folder)} · ${hit.wordCount || 0} từ · ${hit.degree || 0} kết nối</div>
+            <div style="font-size:11px;color:var(--text-secondary);">${(hit.tags || []).map(t => `#${escapeHtml(t)}`).join(' ')}</div>
+          `;
+          el.graphNodeTooltip.style.left = `${Math.min(rect.width - 230, Math.max(12, e.clientX - rect.left + 14))}px`;
+          el.graphNodeTooltip.style.top = `${Math.min(rect.height - 90, Math.max(12, e.clientY - rect.top + 14))}px`;
+          el.graphNodeTooltip.classList.remove('hidden');
+          canvas.style.cursor = 'pointer';
+        } else {
+          el.graphNodeTooltip.classList.add('hidden');
+          canvas.style.cursor = 'grab';
         }
-        updatePomoUI();
-      }, 1000);
-    } else {
-      clearInterval(state.pomo.interval);
-    }
-    updatePomoUI();
-  });
-
-  document.getElementById('btnPomoReset').addEventListener('click', () => {
-    clearInterval(state.pomo.interval);
-    state.pomo.running = false;
-    state.pomo.secondsLeft = 25 * 60;
-    updatePomoUI();
-  });
-
-  // Command Palette (Ctrl+K)
-  const cmdModal = document.getElementById('cmdPaletteModal');
-  const cmdInput = document.getElementById('cmdSearchInput');
-  const cmdResults = document.getElementById('cmdResultsList');
-
-  const renderCmdResults = () => {
-    const q = cmdInput.value.trim().toLowerCase();
-    const matchedNotes = state.notes
-      .filter(n => !q || n.title.toLowerCase().includes(q) || n.folder.toLowerCase().includes(q))
-      .slice(0, 6);
-
-    cmdResults.innerHTML = matchedNotes
-      .map(
-        n => `
-      <div class="cmd-item" data-cmdnote="${n.id}">
-        <span><span class="note-card-icon">${escapeHtml(n.icon)}</span> <strong>${escapeHtml(n.title)}</strong></span>
-        <span class="note-folder-pill">${escapeHtml(n.folder)}</span>
-      </div>
-    `
-      )
-      .join('');
-  };
-
-  window.addEventListener('keydown', e => {
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
-      e.preventDefault();
-      cmdModal.classList.toggle('hidden');
-      if (!cmdModal.classList.contains('hidden')) {
-        cmdInput.value = '';
-        renderCmdResults();
-        cmdInput.focus();
       }
-    } else if (e.key === 'Escape') {
-      cmdModal.classList.add('hidden');
-      templatesModal.classList.add('hidden');
-      emojiPopover.classList.add('hidden');
+    });
+
+    window.addEventListener('mouseup', () => {
+      if (state.graph.draggingNode && !state.graph.pointerMoved) {
+        selectNote(state.graph.draggingNode.id, true);
+      }
+      state.graph.draggingNode = null;
+      state.graph.panning = false;
+    });
+
+    canvas.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const factor = e.deltaY < 0 ? 1.1 : 0.9;
+      state.graph.scale = Math.min(2.6, Math.max(0.4, state.graph.scale * factor));
+    }, { passive: false });
+  }
+
+  /* --------------------------------------------------------------------------
+   * View 3: Action Tasks Hub
+   * ------------------------------------------------------------------------ */
+
+  function renderTasksHub() {
+    if (!el.tasksHubList) return;
+    const filter = state.taskFilter;
+    const groups = [];
+
+    for (const note of state.notes) {
+      const tasks = (note.tasks || []).filter(t => {
+        if (filter === 'pending') return !t.completed;
+        if (filter === 'done') return t.completed;
+        return true;
+      });
+      if (tasks.length) {
+        groups.push({ note, tasks });
+      }
     }
-  });
 
-  cmdInput.addEventListener('input', renderCmdResults);
-  cmdResults.addEventListener('click', e => {
-    const item = e.target.closest('[data-cmdnote]');
-    if (!item) return;
-    state.activeNoteId = item.dataset.cmdnote;
-    cmdModal.classList.add('hidden');
-    switchView('editor');
-    renderSidebar();
-    renderActiveNote();
-  });
+    if (!groups.length) {
+      el.tasksHubList.innerHTML = `
+        <div class="task-group-card">
+          <div style="color:var(--text-secondary);font-size:13px;">
+            Không có nhiệm vụ nào ở bộ lọc hiện tại. Dùng cú pháp <code>- [ ] Việc cần làm</code> trong ghi chú để tự động tổng hợp vào đây.
+          </div>
+        </div>`;
+      return;
+    }
 
-  cmdModal.addEventListener('click', e => {
-    if (e.target === cmdModal) cmdModal.classList.add('hidden');
-  });
-}
+    el.tasksHubList.innerHTML = groups.map(({ note, tasks }) => {
+      const done = tasks.filter(t => t.completed).length;
+      return `
+        <div class="task-group-card">
+          <div class="task-group-header">
+            <div class="task-group-title" data-open-note-id="${escapeHtml(note.id)}">
+              <span class="note-card-icon">${escapeHtml(note.icon || 'DOC')}</span>
+              <span>${escapeHtml(note.title)}</span>
+            </div>
+            <span class="badge">${done}/${tasks.length}</span>
+          </div>
+          <div>
+            ${tasks.map(t => `
+              <label class="task-row ${t.completed ? 'done' : ''}">
+                <input type="checkbox" data-task-note="${escapeHtml(note.id)}" data-task-line="${t.lineIndex}" ${t.completed ? 'checked' : ''} />
+                <span>${escapeHtml(t.text)}</span>
+              </label>
+            `).join('')}
+          </div>
+        </div>`;
+    }).join('');
+  }
 
-/* ============================================================================
- * BOOTSTRAP
- * ============================================================================ */
-window.addEventListener('DOMContentLoaded', async () => {
-  setupEventListeners();
-  setupGraphCanvasInteractions();
-  await loadAllData(true);
-});
+  /* --------------------------------------------------------------------------
+   * View 4: Insights & Focus Metrics
+   * ------------------------------------------------------------------------ */
+
+  function renderBarList(container, countsObj, maxBars = 6) {
+    if (!container) return;
+    const entries = Object.entries(countsObj || {}).sort((a, b) => b[1] - a[1]).slice(0, maxBars);
+    if (!entries.length) {
+      container.innerHTML = '<div style="color:var(--text-muted);font-size:12px;">Chưa có dữ liệu thống kê.</div>';
+      return;
+    }
+    const maxVal = Math.max(1, entries[0][1]);
+    container.innerHTML = entries.map(([label, val]) => `
+      <div class="bar-row">
+        <div class="bar-label-line">
+          <span>${escapeHtml(label)}</span>
+          <span style="font-family:var(--font-mono);color:var(--text-secondary);">${val}</span>
+        </div>
+        <div class="bar-track">
+          <div class="bar-fill" style="width:${Math.round((val / maxVal) * 100)}%"></div>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  function renderInsights() {
+    const s = state.stats;
+    if (!s || !el.insightsKpiGrid) return;
+
+    const completionRate = s.totalTasks ? Math.round((s.completedTasks / s.totalTasks) * 100) : 0;
+    const focus = s.focus || { totalMinutes: 0, sessionCount: 0, recentSessions: [] };
+
+    el.insightsKpiGrid.innerHTML = `
+      <div class="kpi-card">
+        <div class="kpi-label">Tổng tài liệu tri thức</div>
+        <div class="kpi-value">${s.noteCount || 0}</div>
+        <div class="kpi-sub">${s.totalWords || 0} từ đã biên soạn</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Mật độ liên kết Zettelkasten</div>
+        <div class="kpi-value">${s.linkCount || 0}</div>
+        <div class="kpi-sub">Cạnh liên kết hai chiều trên Đồ thị</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Tiến độ Action Tasks</div>
+        <div class="kpi-value">${completionRate}%</div>
+        <div class="kpi-sub">${s.completedTasks || 0} / ${s.totalTasks || 0} nhiệm vụ hoàn tất</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Thời lượng Deep Work</div>
+        <div class="kpi-value">${focus.totalMinutes || 0}p</div>
+        <div class="kpi-sub">${focus.sessionCount || 0} phiên Pomodoro ghi nhận</div>
+      </div>
+    `;
+
+    renderBarList(el.folderDistChart, s.folderCounts, 6);
+    const prefixedTags = {};
+    Object.entries(s.tagCounts || {}).forEach(([k, v]) => {
+      prefixedTags[`#${k}`] = v;
+    });
+    renderBarList(el.tagDistChart, prefixedTags, 6);
+
+    if (el.focusHistoryList) {
+      const sessions = focus.recentSessions || [];
+      if (!sessions.length) {
+        el.focusHistoryList.innerHTML = '<div style="color:var(--text-muted);font-size:12px;">Chưa có phiên Pomodoro nào hoàn tất.</div>';
+      } else {
+        el.focusHistoryList.innerHTML = sessions.map(item => `
+          <div class="focus-item">
+            <div>
+              <strong>${escapeHtml(item.note_title || 'Deep Work Session')}</strong>
+              <span style="color:var(--text-muted);margin-left:8px;font-size:11.5px;">${formatRelativeTime(item.completed_at)}</span>
+            </div>
+            <span class="badge badge-amber">${item.duration_minutes || 25} phút</span>
+          </div>
+        `).join('');
+      }
+    }
+  }
+
+  /* --------------------------------------------------------------------------
+   * Pomodoro Timer
+   * ------------------------------------------------------------------------ */
+
+  function renderPomodoro() {
+    if (!el.pomoTimeDisplay) return;
+    const min = Math.floor(state.pomo.remainingSeconds / 60);
+    const sec = state.pomo.remainingSeconds % 60;
+    el.pomoTimeDisplay.textContent = `${String(min).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+    if (el.btnPomoToggle) {
+      el.btnPomoToggle.textContent = state.pomo.running ? '❚❚' : '▶';
+    }
+  }
+
+  async function completePomodoroSession() {
+    clearInterval(state.pomo.timerId);
+    state.pomo.timerId = null;
+    state.pomo.running = false;
+    state.pomo.remainingSeconds = state.pomo.totalSeconds;
+    renderPomodoro();
+
+    const active = getActiveNote();
+    try {
+      const res = await apiFetch('/api/focus', {
+        method: 'POST',
+        body: JSON.stringify({
+          noteId: active?.id || null,
+          noteTitle: active?.title || 'Deep Work Session',
+          durationMinutes: 25
+        })
+      });
+      if (res.stats) state.stats = res.stats;
+      if (state.activeView === 'insights') renderInsights();
+      showToast('Hoàn tất phiên Pomodoro 25 phút!');
+    } catch (err) {
+      showToast(`Không thể lưu phiên Pomodoro: ${err.message}`, 'amber');
+    }
+  }
+
+  function togglePomodoro() {
+    if (state.pomo.running) {
+      clearInterval(state.pomo.timerId);
+      state.pomo.timerId = null;
+      state.pomo.running = false;
+      renderPomodoro();
+      return;
+    }
+    state.pomo.running = true;
+    renderPomodoro();
+    state.pomo.timerId = setInterval(() => {
+      if (state.pomo.remainingSeconds <= 1) {
+        completePomodoroSession();
+        return;
+      }
+      state.pomo.remainingSeconds--;
+      renderPomodoro();
+    }, 1000);
+  }
+
+  function resetPomodoro() {
+    clearInterval(state.pomo.timerId);
+    state.pomo.timerId = null;
+    state.pomo.running = false;
+    state.pomo.remainingSeconds = state.pomo.totalSeconds;
+    renderPomodoro();
+  }
+
+  /* --------------------------------------------------------------------------
+   * Command Palette, Templates & Icon Badge Popover
+   * ------------------------------------------------------------------------ */
+
+  function openCommandPalette() {
+    if (!el.cmdPaletteModal) return;
+    el.cmdPaletteModal.classList.remove('hidden');
+    if (el.cmdSearchInput) {
+      el.cmdSearchInput.value = '';
+      renderCommandResults('');
+      el.cmdSearchInput.focus();
+    }
+  }
+
+  function closeCommandPalette() {
+    if (el.cmdPaletteModal) el.cmdPaletteModal.classList.add('hidden');
+  }
+
+  function renderCommandResults(query) {
+    if (!el.cmdResultsList) return;
+    const q = (query || '').trim().toLowerCase();
+    const matches = state.notes.filter(n =>
+      !q ||
+      n.title.toLowerCase().includes(q) ||
+      (n.folder || '').toLowerCase().includes(q) ||
+      (n.tags || []).some(t => t.toLowerCase().includes(q))
+    );
+    if (!matches.length) {
+      el.cmdResultsList.innerHTML = `
+        <div class="cmd-item" data-create-from-cmd="${escapeHtml(query.trim())}">
+          <span>+ Tạo nhanh tài liệu "${escapeHtml(query.trim() || 'Tài liệu mới')}"</span>
+          <span class="badge badge-emerald">Enter</span>
+        </div>`;
+      return;
+    }
+    el.cmdResultsList.innerHTML = matches.slice(0, 12).map(n => `
+      <div class="cmd-item" data-cmd-note-id="${escapeHtml(n.id)}">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span class="note-card-icon">${escapeHtml(n.icon || 'DOC')}</span>
+          <span>${escapeHtml(n.title)}</span>
+        </div>
+        <span class="note-folder-pill">${escapeHtml(n.folder || 'Inbox')}</span>
+      </div>
+    `).join('');
+  }
+
+  function openTemplatesModal() {
+    if (!el.templatesModal || !el.templatesList) return;
+    el.templatesList.innerHTML = NOTE_TEMPLATES.map((tpl, idx) => `
+      <div class="template-card" data-template-idx="${idx}">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+          <span class="note-card-icon">${escapeHtml(tpl.icon)}</span>
+          <span class="note-folder-pill">${escapeHtml(tpl.folder)}</span>
+        </div>
+        <h4>${escapeHtml(tpl.title)}</h4>
+        <p>${escapeHtml(tpl.tags.map(t => `#${t}`).join(' '))}</p>
+      </div>
+    `).join('');
+    el.templatesModal.classList.remove('hidden');
+  }
+
+  function closeTemplatesModal() {
+    if (el.templatesModal) el.templatesModal.classList.add('hidden');
+  }
+
+  function toggleIconPopover() {
+    if (!el.emojiPopover || !el.btnPickIcon) return;
+    if (!el.emojiPopover.classList.contains('hidden')) {
+      el.emojiPopover.classList.add('hidden');
+      return;
+    }
+    const rect = el.btnPickIcon.getBoundingClientRect();
+    el.emojiPopover.innerHTML = ICON_BADGES.map(code =>
+      `<button type="button" class="emoji-choice" data-icon-code="${code}">${code}</button>`
+    ).join('');
+    el.emojiPopover.style.left = `${Math.min(window.innerWidth - 240, rect.left)}px`;
+    el.emojiPopover.style.top = `${rect.bottom + 6}px`;
+    el.emojiPopover.classList.remove('hidden');
+  }
+
+  /* --------------------------------------------------------------------------
+   * Event Listeners Wiring
+   * ------------------------------------------------------------------------ */
+
+  function bindEvents() {
+    if (el.btnMobileMenu) el.btnMobileMenu.addEventListener('click', openMobileMenu);
+    if (el.mobileBackdrop) el.mobileBackdrop.addEventListener('click', closeMobileMenu);
+
+    if (el.btnToggleTheme) {
+      el.btnToggleTheme.addEventListener('click', () => {
+        applyTheme(state.theme === 'dark' ? 'light' : 'dark');
+      });
+    }
+
+    if (el.btnResetDemo) {
+      el.btnResetDemo.addEventListener('click', async () => {
+        if (!window.MindVaultLocalEngine) return;
+        window.MindVaultLocalEngine.resetDemo();
+        await loadVault({ preserveActiveId: false });
+        if (state.activeView === 'graph') await refreshGraphData();
+        showToast('Đã khôi phục 6 tài liệu mẫu mặc định');
+      });
+    }
+
+    if (el.btnNewNote) {
+      el.btnNewNote.addEventListener('click', () => createNewNote());
+    }
+
+    if (el.sidebarSearchInput) {
+      el.sidebarSearchInput.addEventListener('input', (e) => {
+        state.filter.search = e.target.value;
+        renderSidebar();
+      });
+    }
+
+    el.modeBtns.forEach(btn => {
+      btn.addEventListener('click', () => switchView(btn.dataset.view));
+    });
+
+    el.layoutBtns.forEach(btn => {
+      btn.addEventListener('click', () => setEditorLayout(btn.dataset.layout));
+    });
+
+    if (el.btnClearFilter) {
+      el.btnClearFilter.addEventListener('click', () => {
+        state.filter.folder = null;
+        state.filter.tag = null;
+        state.filter.favoriteOnly = false;
+        state.filter.search = '';
+        if (el.sidebarSearchInput) el.sidebarSearchInput.value = '';
+        if (el.chkFavoriteOnly) el.chkFavoriteOnly.checked = false;
+        renderSidebar();
+      });
+    }
+
+    if (el.chkFavoriteOnly) {
+      el.chkFavoriteOnly.addEventListener('change', (e) => {
+        state.filter.favoriteOnly = e.target.checked;
+        renderSidebar();
+      });
+    }
+
+    if (el.folderList) {
+      el.folderList.addEventListener('click', (e) => {
+        const chip = e.target.closest('[data-folder]');
+        if (!chip) return;
+        const folder = chip.dataset.folder;
+        state.filter.folder = state.filter.folder === folder ? null : folder;
+        renderSidebar();
+      });
+    }
+
+    if (el.tagList) {
+      el.tagList.addEventListener('click', (e) => {
+        const chip = e.target.closest('[data-tag]');
+        if (!chip) return;
+        const tag = chip.dataset.tag;
+        state.filter.tag = state.filter.tag === tag ? null : tag;
+        renderSidebar();
+      });
+    }
+
+    if (el.notesListContainer) {
+      el.notesListContainer.addEventListener('click', (e) => {
+        const card = e.target.closest('[data-note-id]');
+        if (!card) return;
+        selectNote(card.dataset.noteId, true);
+      });
+    }
+
+    // Editor inputs & autosave
+    [el.noteTitleInput, el.noteFolderInput, el.noteColorInput].forEach(input => {
+      if (!input) return;
+      input.addEventListener('input', () => scheduleSave());
+    });
+
+    if (el.noteContentInput) {
+      el.noteContentInput.addEventListener('input', () => {
+        updateLivePreviewAndConnections();
+        scheduleSave();
+      });
+    }
+
+    // Markdown toolbar snippets
+    el.mdToolBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const ta = el.noteContentInput;
+        if (!ta) return;
+        const snippet = (btn.dataset.insert || '').replace(/\\n/g, '\n');
+        const start = ta.selectionStart ?? ta.value.length;
+        const end = ta.selectionEnd ?? ta.value.length;
+        ta.value = ta.value.slice(0, start) + snippet + ta.value.slice(end);
+        ta.focus();
+        ta.selectionStart = ta.selectionEnd = start + snippet.length;
+        updateLivePreviewAndConnections();
+        scheduleSave();
+      });
+    });
+
+    // Tags add/remove on active note
+    if (el.tagAddInput) {
+      el.tagAddInput.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        const note = getActiveNote();
+        const rawTag = el.tagAddInput.value.trim().replace(/^#+/, '').toLowerCase();
+        if (!note || !rawTag) return;
+        if (!note.tags.includes(rawTag)) {
+          note.tags.push(rawTag);
+          renderActiveNoteTags(note);
+          flushPendingSave();
+        }
+        el.tagAddInput.value = '';
+      });
+    }
+
+    if (el.activeNoteTags) {
+      el.activeNoteTags.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-remove-tag]');
+        const note = getActiveNote();
+        if (!btn || !note) return;
+        const tagToRemove = btn.dataset.removeTag;
+        note.tags = (note.tags || []).filter(t => t !== tagToRemove);
+        renderActiveNoteTags(note);
+        flushPendingSave();
+      });
+    }
+
+    // Pin, Fav, Delete, Export MD
+    if (el.btnTogglePin) {
+      el.btnTogglePin.addEventListener('click', () => {
+        const note = getActiveNote();
+        if (!note) return;
+        note.pinned = !note.pinned;
+        renderActiveNote();
+        flushPendingSave();
+      });
+    }
+
+    if (el.btnToggleFav) {
+      el.btnToggleFav.addEventListener('click', () => {
+        const note = getActiveNote();
+        if (!note) return;
+        note.favorite = !note.favorite;
+        renderActiveNote();
+        flushPendingSave();
+      });
+    }
+
+    if (el.btnExportMd) el.btnExportMd.addEventListener('click', exportActiveMarkdown);
+    if (el.btnDeleteNote) el.btnDeleteNote.addEventListener('click', deleteActiveNote);
+
+    // Preview checkbox toggle & wiki-links
+    if (el.markdownPreview) {
+      el.markdownPreview.addEventListener('change', async (e) => {
+        const cb = e.target.closest('input[type="checkbox"][data-line-index]');
+        const note = getActiveNote();
+        if (!cb || !note) return;
+        const lineIndex = Number(cb.dataset.lineIndex);
+        const res = await apiFetch('/api/tasks/toggle', {
+          method: 'POST',
+          body: JSON.stringify({ noteId: note.id, lineIndex })
+        });
+        if (res.note) {
+          replaceNoteInState(res.note);
+          if (el.noteContentInput) el.noteContentInput.value = res.note.content;
+          updateLivePreviewAndConnections();
+          state.stats = await apiFetch('/api/stats');
+          updateNavBadges();
+        }
+      });
+
+      el.markdownPreview.addEventListener('click', (e) => {
+        const link = e.target.closest('[data-wiki-target]');
+        if (!link) return;
+        openOrCreateWikiTarget(link.dataset.wikiTarget);
+      });
+    }
+
+    [el.outgoingLinksList, el.backlinksList].forEach(box => {
+      if (!box) return;
+      box.addEventListener('click', (e) => {
+        const wikiBtn = e.target.closest('[data-wiki-target]');
+        if (wikiBtn) return openOrCreateWikiTarget(wikiBtn.dataset.wikiTarget);
+        const noteBtn = e.target.closest('[data-open-note-id]');
+        if (noteBtn) return selectNote(noteBtn.dataset.openNoteId, true);
+      });
+    });
+
+    // Graph controls
+    if (el.graphSearchInput) {
+      el.graphSearchInput.addEventListener('input', (e) => {
+        state.graphSearch = e.target.value;
+        drawScene();
+      });
+    }
+
+    if (el.btnGraphResetZoom) {
+      el.btnGraphResetZoom.addEventListener('click', () => {
+        state.graph.panX = 0;
+        state.graph.panY = 0;
+        state.graph.scale = 1;
+        drawScene();
+      });
+    }
+
+    if (el.btnGraphRepulse) {
+      el.btnGraphRepulse.addEventListener('click', () => {
+        state.graph.nodes.forEach(n => {
+          n.vx += (Math.random() - 0.5) * 14;
+          n.vy += (Math.random() - 0.5) * 14;
+        });
+      });
+    }
+
+    // Tasks Hub filtering & toggling
+    el.taskTabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        state.taskFilter = tab.dataset.tfilter;
+        el.taskTabs.forEach(t => t.classList.toggle('active', t === tab));
+        renderTasksHub();
+      });
+    });
+
+    if (el.tasksHubList) {
+      el.tasksHubList.addEventListener('change', async (e) => {
+        const cb = e.target.closest('input[type="checkbox"][data-task-note]');
+        if (!cb) return;
+        const noteId = cb.dataset.taskNote;
+        const lineIndex = Number(cb.dataset.taskLine);
+        const res = await apiFetch('/api/tasks/toggle', {
+          method: 'POST',
+          body: JSON.stringify({ noteId, lineIndex })
+        });
+        if (res.note) {
+          replaceNoteInState(res.note);
+          if (noteId === state.activeNoteId) renderActiveNote();
+          state.stats = await apiFetch('/api/stats');
+          updateNavBadges();
+          renderTasksHub();
+        }
+      });
+
+      el.tasksHubList.addEventListener('click', (e) => {
+        const titleEl = e.target.closest('[data-open-note-id]');
+        if (titleEl) selectNote(titleEl.dataset.openNoteId, true);
+      });
+    }
+
+    // Pomodoro & Sidebar Footer actions
+    if (el.btnPomoToggle) el.btnPomoToggle.addEventListener('click', togglePomodoro);
+    if (el.btnPomoReset) el.btnPomoReset.addEventListener('click', resetPomodoro);
+    if (el.btnExportVault) el.btnExportVault.addEventListener('click', exportVaultJson);
+    if (el.btnImportVault && el.fileImportVault) {
+      el.btnImportVault.addEventListener('click', () => el.fileImportVault.click());
+      el.fileImportVault.addEventListener('change', (e) => importVaultFile(e.target.files?.[0]));
+    }
+
+    // Templates modal
+    if (el.btnTemplates) el.btnTemplates.addEventListener('click', openTemplatesModal);
+    if (el.btnCloseTemplates) el.btnCloseTemplates.addEventListener('click', closeTemplatesModal);
+    if (el.templatesModal) {
+      el.templatesModal.addEventListener('click', (e) => {
+        if (e.target === el.templatesModal) closeTemplatesModal();
+        const card = e.target.closest('[data-template-idx]');
+        if (card) {
+          const tpl = NOTE_TEMPLATES[Number(card.dataset.templateIdx)];
+          closeTemplatesModal();
+          if (tpl) createNewNote(tpl);
+        }
+      });
+    }
+
+    // Command palette
+    if (el.cmdPaletteModal) {
+      el.cmdPaletteModal.addEventListener('click', (e) => {
+        if (e.target === el.cmdPaletteModal) closeCommandPalette();
+        const item = e.target.closest('[data-cmd-note-id]');
+        if (item) {
+          closeCommandPalette();
+          selectNote(item.dataset.cmdNoteId, true);
+        }
+        const createItem = e.target.closest('[data-create-from-cmd]');
+        if (createItem) {
+          closeCommandPalette();
+          createNewNote({ title: createItem.dataset.createFromCmd || 'Tài liệu mới' });
+        }
+      });
+    }
+
+    if (el.cmdSearchInput) {
+      el.cmdSearchInput.addEventListener('input', (e) => renderCommandResults(e.target.value));
+      el.cmdSearchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          const first = el.cmdResultsList?.querySelector('.cmd-item');
+          first?.click();
+        }
+      });
+    }
+
+    // Icon badge picker popover
+    if (el.btnPickIcon) {
+      el.btnPickIcon.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleIconPopover();
+      });
+    }
+
+    if (el.emojiPopover) {
+      el.emojiPopover.addEventListener('click', (e) => {
+        const choice = e.target.closest('[data-icon-code]');
+        const note = getActiveNote();
+        if (!choice || !note) return;
+        note.icon = choice.dataset.iconCode;
+        el.emojiPopover.classList.add('hidden');
+        renderActiveNote();
+        flushPendingSave();
+      });
+    }
+
+    document.addEventListener('click', (e) => {
+      if (el.emojiPopover && !el.emojiPopover.contains(e.target) && e.target !== el.btnPickIcon) {
+        el.emojiPopover.classList.add('hidden');
+      }
+    });
+
+    // Global keyboard shortcuts
+    window.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        openCommandPalette();
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        flushPendingSave();
+        showToast('Đã đồng bộ ghi chú hiện tại');
+      } else if (e.key === 'Escape') {
+        closeCommandPalette();
+        closeTemplatesModal();
+        closeMobileMenu();
+        el.emojiPopover?.classList.add('hidden');
+      }
+    });
+  }
+
+  /* --------------------------------------------------------------------------
+   * Bootstrap
+   * ------------------------------------------------------------------------ */
+
+  async function init() {
+    applyTheme(getSavedTheme());
+    bindEvents();
+    setupGraphEvents();
+    renderPomodoro();
+    await detectRuntimeMode();
+    await loadVault({ preserveActiveId: false });
+  }
+
+  if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+    document.addEventListener('DOMContentLoaded', init);
+  }
+})();
